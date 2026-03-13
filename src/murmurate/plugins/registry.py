@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 BUNDLED_PLUGINS: list[str] = [
     "murmurate.plugins.duckduckgo",  # Added in Task 14
     "murmurate.plugins.wikipedia",   # Added in Task 14
+    "murmurate.plugins.google",      # Added in Tasks 20-24
+    "murmurate.plugins.youtube",     # Added in Tasks 20-24
+    "murmurate.plugins.amazon",      # Added in Tasks 20-24
+    "murmurate.plugins.reddit",      # Added in Tasks 20-24
+    "murmurate.plugins.bing",        # Added in Tasks 20-24
 ]
 
 
