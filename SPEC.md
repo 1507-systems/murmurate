@@ -357,8 +357,8 @@ murmurate start --config-dir "~/Library/Mobile Documents/com~apple~CloudDocs/mur
 # List personas and their topic trees
 murmurate personas list
 
-# Add a new persona seed
-murmurate personas add --name "gardener" --seeds "container gardening,herb growing"
+# Add a new persona with topic seeds
+murmurate personas add gardener --seeds "container gardening" --seeds "herb growing"
 
 # Show session history
 murmurate history --last 24h

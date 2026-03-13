@@ -195,7 +195,7 @@ class HttpTransport:
         # have already checked permissions.  We just surface the flag here so
         # future tasks can hook in without changing the call site.
         if self._config and getattr(self._config, "respect_robots_txt", False):
-            # Placeholder — robots.txt checking deferred to Task 14+
+            # robots.txt checking not yet implemented
             pass
 
         headers = {

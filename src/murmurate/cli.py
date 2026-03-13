@@ -2,17 +2,23 @@
 cli.py — Murmurate CLI, implemented with Click.
 
 Entry points:
-  murmurate run          — run browsing sessions in the foreground
-  murmurate status       — check whether the background daemon is running
-  murmurate stop         — send stop signal to the daemon
-  murmurate personas     — create and inspect personas
-  murmurate plugins      — inspect available plugins
-  murmurate history      — view recent session history
-  murmurate stats        — view activity statistics
+  murmurate run              — run browsing sessions in the foreground
+  murmurate start            — start daemon (foreground, for launchd/systemd)
+  murmurate status           — check whether the background daemon is running
+  murmurate stop             — send stop signal to the daemon
+  murmurate install-daemon   — install as a system daemon
+  murmurate uninstall-daemon — remove installed daemon service
+  murmurate personas         — create and inspect personas
+  murmurate plugins          — inspect available plugins
+  murmurate history          — view recent session history
+  murmurate stats            — view activity statistics
 
 The `run` command is the main operational path: it wires up all subsystems
 (config, database, personas, plugins, transports, scheduler) and drives them
 until the requested number of sessions completes or the user interrupts.
+
+The `start` command is similar but runs indefinitely (no --sessions limit),
+writes a PID file, and is intended for use with launchd or systemd.
 
 All other commands are read-only introspection helpers that never require the
 full async stack to be running.
@@ -69,6 +75,36 @@ def run(sessions, config_dir, log_format):
     setup_logging(log_file=None, level="INFO", json_format=(log_format == "json"))
 
     asyncio.run(_run_sessions(config, config_path, sessions))
+
+
+# ---------------------------------------------------------------------------
+# start command (daemon foreground mode for launchd/systemd)
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option("--config-dir", type=click.Path(exists=False), default=None)
+@click.option("--log-format", type=click.Choice(["json", "text"]), default="json")
+def start(config_dir, log_format):
+    """Start the daemon (foreground, for use with launchd/systemd)."""
+    from murmurate.config import load_config, resolve_config_dir
+    from murmurate.log import setup_logging
+    from murmurate.daemon.lifecycle import check_already_running, write_pid, cleanup_pid
+
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+    pid_file = config_path / "murmurate.pid"
+
+    if check_already_running(pid_file):
+        click.echo("Daemon already running. Use 'murmurate stop' first.")
+        sys.exit(1)
+
+    config = load_config(config_path)
+    setup_logging(log_file=None, level="INFO", json_format=(log_format == "json"))
+
+    write_pid(pid_file)
+    try:
+        asyncio.run(_run_sessions(config, config_path, None))
+    finally:
+        cleanup_pid(pid_file)
 
 
 async def _run_sessions(config, config_dir: Path, max_sessions: int | None) -> None:
@@ -159,9 +195,16 @@ def status(config_dir):
 )
 def stop(config_dir):
     """Stop the running daemon."""
-    # Daemon lifecycle is implemented in Task 19; this is a placeholder that
-    # confirms the command is wired up and communicates intent to the user.
-    click.echo("Sending stop signal...")
+    from murmurate.config import resolve_config_dir
+    from murmurate.daemon.lifecycle import stop_daemon
+
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+    pid_file = config_path / "murmurate.pid"
+
+    if stop_daemon(pid_file):
+        click.echo("Stop signal sent.")
+    else:
+        click.echo("Daemon not running.")
 
 
 # ---------------------------------------------------------------------------
@@ -309,9 +352,35 @@ def plugins_info(name):
 )
 def history(last, config_dir):
     """Show recent session history."""
-    # Full implementation requires database queries; placeholder for Task 18.
-    # The database query layer is built out in Task 17 and will be wired here.
-    click.echo(f"Last {last} sessions:")
+    from murmurate.config import resolve_config_dir
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+    db_path = config_path / "state.db"
+
+    if not db_path.exists():
+        click.echo("No session history found.")
+        return
+
+    asyncio.run(_show_history(db_path, last))
+
+
+async def _show_history(db_path, limit):
+    """Load and display recent sessions from the state database."""
+    from murmurate.database import StateDB
+    db = StateDB(db_path)
+    await db.initialize()
+    try:
+        sessions = await db.get_session_history(limit)
+        if not sessions:
+            click.echo("No sessions found.")
+            return
+        for s in sessions:
+            status = s.get("status", "unknown")
+            plugin = s.get("plugin_name", "?")
+            persona = s.get("persona_name", "?")
+            started = s.get("started_at", "?")[:19]
+            click.echo(f"  [{status}] {persona} → {plugin} at {started}")
+    finally:
+        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -330,5 +399,94 @@ def history(last, config_dir):
 )
 def stats(days, config_dir):
     """Show activity statistics."""
-    # Full implementation requires database aggregation; placeholder for Task 18.
-    click.echo(f"Statistics for last {days} days:")
+    from murmurate.config import resolve_config_dir
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+    db_path = config_path / "state.db"
+
+    if not db_path.exists():
+        click.echo("No session data found.")
+        return
+
+    asyncio.run(_show_stats(db_path, days))
+
+
+async def _show_stats(db_path, days):
+    """Compute and display activity statistics from the state database."""
+    from murmurate.database import StateDB
+    db = StateDB(db_path)
+    await db.initialize()
+    try:
+        sessions = await db.get_session_history(limit=10000)
+        if not sessions:
+            click.echo("No sessions found.")
+            return
+
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        recent = [s for s in sessions if s.get("started_at", "") >= cutoff]
+
+        total = len(recent)
+        completed = sum(1 for s in recent if s.get("status") == "completed")
+        failed = sum(1 for s in recent if s.get("status") == "failed")
+
+        # Plugin distribution
+        plugins = {}
+        for s in recent:
+            p = s.get("plugin_name", "unknown")
+            plugins[p] = plugins.get(p, 0) + 1
+
+        click.echo(f"Statistics for last {days} days:")
+        click.echo(f"  Total sessions: {total} ({completed} completed, {failed} failed)")
+        if plugins:
+            click.echo("  Plugin distribution:")
+            for name, count in sorted(plugins.items(), key=lambda x: -x[1]):
+                pct = count / total * 100 if total > 0 else 0
+                click.echo(f"    {name}: {count} ({pct:.0f}%)")
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# install-daemon / uninstall-daemon commands
+# ---------------------------------------------------------------------------
+
+@cli.command("install-daemon")
+@click.option("--config-dir", type=click.Path(exists=False), default=None)
+@click.option("--systemd", is_flag=True, help="Generate systemd unit instead of launchd plist")
+def install_daemon(config_dir, systemd):
+    """Install as a system daemon (launchd on macOS, systemd on Linux)."""
+    from murmurate.config import resolve_config_dir
+    from murmurate.daemon.install import install_launchd, generate_systemd_unit
+
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+
+    if systemd:
+        unit = generate_systemd_unit(config_path)
+        unit_path = Path.home() / ".config" / "systemd" / "user" / "murmurate.service"
+        unit_path.parent.mkdir(parents=True, exist_ok=True)
+        unit_path.write_text(unit)
+        click.echo(f"Systemd unit installed: {unit_path}")
+        click.echo("Run: systemctl --user enable --now murmurate")
+    else:
+        plist_path = install_launchd(config_path)
+        click.echo(f"LaunchAgent installed: {plist_path}")
+        click.echo("Run: launchctl load " + str(plist_path))
+
+
+@cli.command("uninstall-daemon")
+@click.option("--systemd", is_flag=True, help="Remove systemd unit instead of launchd plist")
+def uninstall_daemon(systemd):
+    """Remove the installed daemon service."""
+    if systemd:
+        unit_path = Path.home() / ".config" / "systemd" / "user" / "murmurate.service"
+        if unit_path.exists():
+            unit_path.unlink()
+            click.echo(f"Systemd unit removed: {unit_path}")
+        else:
+            click.echo("No systemd unit found.")
+    else:
+        from murmurate.daemon.install import uninstall_launchd
+        if uninstall_launchd():
+            click.echo("LaunchAgent removed.")
+        else:
+            click.echo("No LaunchAgent found.")

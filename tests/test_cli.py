@@ -101,33 +101,64 @@ def test_status_running(runner, tmp_path):
     assert "12345" in result.output
 
 
-def test_stop_command(runner):
-    """stop command should exit cleanly."""
-    result = runner.invoke(cli, ["stop"])
+def test_stop_command_not_running(runner, tmp_path):
+    """stop command should report daemon not running when no PID file exists."""
+    result = runner.invoke(cli, ["stop", "--config-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "not running" in result.output.lower()
+
+
+def test_stop_command_with_stale_pid(runner, tmp_path):
+    """stop command should handle a stale PID file gracefully."""
+    pid_file = tmp_path / "murmurate.pid"
+    # Use a PID that almost certainly doesn't exist
+    pid_file.write_text("999999999")
+    result = runner.invoke(cli, ["stop", "--config-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "not running" in result.output.lower()
+
+
+def test_history_command_no_db(runner, tmp_path):
+    """history command should report no history when database doesn't exist."""
+    result = runner.invoke(cli, ["history", "--config-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "No session history" in result.output
+
+
+def test_history_command_with_n(runner, tmp_path):
+    """history -n should accept a custom count and exit cleanly."""
+    result = runner.invoke(cli, ["history", "-n", "20", "--config-dir", str(tmp_path)])
     assert result.exit_code == 0
 
 
-def test_history_command(runner):
-    """history command should exit cleanly and mention session count."""
-    result = runner.invoke(cli, ["history"])
+def test_stats_command_no_db(runner, tmp_path):
+    """stats command should report no data when database doesn't exist."""
+    result = runner.invoke(cli, ["stats", "--config-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "No session data" in result.output
+
+
+def test_stats_command_with_days(runner, tmp_path):
+    """stats -d should accept a custom number of days and exit cleanly."""
+    result = runner.invoke(cli, ["stats", "-d", "30", "--config-dir", str(tmp_path)])
     assert result.exit_code == 0
 
 
-def test_history_command_with_n(runner):
-    """history -n should accept a custom count."""
-    result = runner.invoke(cli, ["history", "-n", "20"])
+def test_start_command_help(runner):
+    """start --help should describe the daemon foreground mode."""
+    result = runner.invoke(cli, ["start", "--help"])
     assert result.exit_code == 0
-    assert "20" in result.output
+    assert "daemon" in result.output.lower() or "launchd" in result.output.lower()
 
 
-def test_stats_command(runner):
-    """stats command should exit cleanly and mention days."""
-    result = runner.invoke(cli, ["stats"])
+def test_install_daemon_help(runner):
+    """install-daemon --help should describe service installation."""
+    result = runner.invoke(cli, ["install-daemon", "--help"])
     assert result.exit_code == 0
+    assert "daemon" in result.output.lower()
 
 
-def test_stats_command_with_days(runner):
-    """stats -d should accept a custom number of days."""
-    result = runner.invoke(cli, ["stats", "-d", "30"])
+def test_uninstall_daemon_help(runner):
+    """uninstall-daemon --help should describe service removal."""
+    result = runner.invoke(cli, ["uninstall-daemon", "--help"])
     assert result.exit_code == 0
-    assert "30" in result.output

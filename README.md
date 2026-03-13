@@ -33,7 +33,7 @@ murmurate personas add alice --seeds cooking --seeds travel --seeds photography
 # Run 5 browsing sessions
 murmurate run --sessions 5
 
-# Check status
+# Check daemon status
 murmurate status
 
 # View recent activity

@@ -207,7 +207,7 @@ class Scheduler:
                     transport_type=transport_type,
                     queries_executed=len(context.queries),
                     results_browsed=len(actions),
-                    total_duration_s=0.0,   # Placeholder; real timing added in Task 19
+                    total_duration_s=0.0,   # Intentionally unmeasured — per-session wall-clock timing not yet implemented
                     new_subtopics=[],
                     errors=[],
                     completed_at=datetime.now(timezone.utc).isoformat(),
