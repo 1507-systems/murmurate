@@ -21,6 +21,10 @@ Named after murmuration — the swirling flocks of starlings where no individual
 - [CLI Interface](#cli-interface)
 - [Privacy & Ethics](#privacy--ethics)
 - [Inspiration & Prior Art](#inspiration--prior-art)
+- [Data Models](#data-models)
+- [Error Handling](#error-handling)
+- [Daemon Lifecycle](#daemon-lifecycle)
+- [Logging & Observability](#logging--observability)
 - [Tech Stack](#tech-stack)
 
 ---
@@ -110,17 +114,29 @@ Personas are the core differentiator — what makes this noise hard to filter ou
 **Persona structure:**
 - Each persona has a name (for config/logging only), seed interests, and an evolving topic tree
 - Topic trees start from user-provided seeds (e.g., "woodworking") and branch into subtopics over time ("hand planes" → "Stanley No. 4 restoration" → "where to buy japanning lacquer")
-- Evolution is deterministic from the seed + a drift parameter — same seed produces the same tree across machines (important for sync)
+- Topic trees are **append-only** — branches only grow, never prune. This makes multi-machine sync safe (see [Multi-Machine Sync](#multi-machine-sync))
+- Trees are **non-deterministic** across machines — each machine's sessions produce different search results and therefore different branches. This is desirable: more machines = more diverse noise
+
+**Topic evolution algorithm:**
+- Each `TopicNode` has: `topic` (string), `depth` (int), `children` (list of TopicNode), `query_count` (int), `last_used` (ISO timestamp)
+- When a session runs on a topic, the transport returns page content (titles, headings, link text, "related searches" / "People also ask" snippets)
+- **Keyword extraction** (TF-IDF via scikit-learn's `TfidfVectorizer`): extract top-N candidate subtopics from the returned content, filtered against the parent topic for relevance
+- **Drift parameter** (`drift_rate`, 0.0-1.0): controls the probability of accepting a candidate subtopic that is only loosely related to the parent. At 0.0, only highly relevant subtopics are added. At 1.0, the persona wanders freely.
+- **Depth limit** (`max_tree_depth`): prevents runaway branching. Default: 5 levels deep from the seed.
+- **Branch selection for sessions**: weighted random — prefers less-visited branches (`query_count`) and shallower nodes (to build breadth before depth), with a configurable bias toward leaf nodes (to deepen existing threads)
 
 **Session generation:**
-- Scheduler picks a persona, picks a branch of their topic tree, generates a "research session" — a sequence of 3-8 queries that follow a logical progression
+- The Persona Engine (not the plugin) generates the query sequence for a session. It selects a topic branch, then builds a sequence of 3-8 queries that simulate a logical research progression:
+  1. Start with a broad query at the branch's depth level
+  2. Each subsequent query refines or follows up based on the topic tree's structure
+  3. Final queries may explore adjacent branches (simulating "while I'm at it..." behavior)
+- The plugin receives a `SessionContext` (see [Data Models](#data-models)) containing the full query sequence, persona expertise level, and prior session history — it handles site-specific URL construction and navigation
 - Sessions have realistic dwell patterns: search → click result → read (30-120s) → refine query → click another result → done
 - Some sessions are shallow (quick lookup), some are deep dives (20+ minutes across multiple sites)
 
 **Evolution over time:**
-- After each session, the topic tree grows — new subtopics discovered from actual search results get added as branches
-- Personas develop "expertise" — early queries are broad ("woodworking for beginners"), later ones are specific ("mortise gauge setup for through tenons")
-- Drift parameter controls how fast personas evolve and how far they stray from seeds
+- After each session, new subtopics extracted from results are appended to the topic tree
+- Personas develop "expertise" — early queries are broad ("woodworking for beginners"), later ones are specific ("mortise gauge setup for through tenons"). The `query_count` and `depth` on each node drive this progression.
 - Persona state lives in `personas/` directory (JSON files), syncs across machines
 
 **Built-in topic pools:**
@@ -139,7 +155,7 @@ class Transport(ABC):
 
 **HttpTransport (aiohttp):**
 - Lightweight, low resource — used for ~70% of sessions by default
-- Rotates User-Agent strings from a realistic, auto-updated pool
+- Rotates User-Agent strings from a bundled pool (curated list of real browser UAs, updated with each Murmurate release — no runtime network fetches for privacy)
 - Follows redirects, parses HTML responses to extract links for "click-through"
 - Cannot execute JavaScript — sites that require JS get escalated to BrowserTransport
 - Good for: search queries, Wikipedia, Reddit, news sites, Amazon product browsing
@@ -149,8 +165,9 @@ class Transport(ABC):
 - Handles JS-heavy sites, SPAs, infinite scroll
 - Simulates human behavior: mouse movements, scroll patterns, realistic typing speed with typos/corrections
 - Resource-heavy — used for ~30% of sessions by default, configurable
-- Browser instance pooling: reuses contexts to avoid constant startup cost, rotates profiles periodically
+- Browser instance pooling: maintains up to `browser_pool_size` concurrent browser contexts. Contexts rotate after 20 sessions or 2 hours (whichever comes first) to avoid fingerprint staleness. When all pool slots are busy, new browser sessions queue until a slot frees (with a configurable timeout, default 60s, after which the session falls back to HTTP or is skipped). Each rotation creates a fresh profile (no persistent cookies across rotations).
 - Good for: YouTube (watch partial videos), Google with JS, sites with bot detection
+- **TLS fingerprint note:** aiohttp and Playwright have different TLS fingerprints (cipher suites, extensions, ALPN). A sophisticated network observer could distinguish HTTP-transport sessions from browser-transport sessions by TLS characteristics alone. This is an accepted limitation — the two transports are meant to simulate different "applications" a user might use (API client vs. browser), and the per-domain consistency (same transport type for the same site) reduces this as a correlation vector.
 
 **Transport selection:**
 - Plugin declares its preferred transport (some sites require Browser)
@@ -169,10 +186,11 @@ class SitePlugin(ABC):
     preferred_transport: TransportType  # HTTP, BROWSER, or EITHER
     rate_limit_rpm: int
 
-    async def generate_query(self, topic: str, depth: int) -> str
-    async def execute_search(self, query: str, transport: Transport) -> list[SearchResult]
-    async def browse_result(self, result: SearchResult, transport: Transport) -> BrowseAction
+    async def execute_search(self, context: SessionContext, transport: Transport) -> list[SearchResult]
+    async def browse_result(self, result: SearchResult, context: SessionContext, transport: Transport) -> BrowseAction
 ```
+
+Query sequence generation is handled by the Persona Engine (not the plugin). The plugin receives a `SessionContext` containing the pre-built query sequence, persona expertise level, and prior queries — it handles site-specific URL construction and navigation. See [Data Models](#data-models) for the full `SessionContext` definition.
 
 **Bundled plugins:**
 - `google` — web search, follows results, handles "People also ask"
@@ -196,6 +214,12 @@ class SitePlugin(ABC):
 All configuration lives in a single `config.toml` file within the config directory.
 
 ```toml
+# Config and persona files include a version field for forward compatibility.
+# Unknown fields are silently ignored (allows newer configs to be read by older versions).
+# Breaking schema changes increment the major version; Murmurate refuses to load
+# configs with a higher major version than it supports and prints an upgrade message.
+config_version = 1
+
 [scheduler]
 sessions_per_hour = { min = 3, max = 8 }
 active_hours = { start = "07:00", end = "23:00", timezone = "America/New_York" }
@@ -258,13 +282,15 @@ Murmurate supports running on multiple machines with shared configuration — a 
 **Sync behavior:**
 - `config.toml`, `personas/`, `plugins/` are safe to sync (iCloud, Syncthing, Dropbox, git)
 - `local/` is machine-specific — `.gitignore`d, excluded from cloud sync via `.nosync` marker
-- Persona evolution conflict resolution: last-write-wins on JSON files. Since evolution is additive (topic trees only grow), conflicts are rare and harmless — worst case, two machines add different branches and both survive on next sync
+- Persona topic trees are **append-only** — branches only grow, never prune or modify existing nodes. On file sync, if two machines added different branches to the same parent node, both survive (set-union merge). The `query_count` and `last_used` fields use max-wins. In practice, cloud sync (iCloud, Syncthing) handles this via last-write-wins on the JSON file, and since the trees are append-only, the "losing" machine's additions simply appear on the next session when that machine reads the synced file
 - Each machine stamps session log entries with a machine ID (hostname by default, configurable) for audit
 
 ## CLI Interface
 
+**`run` vs `start`:** `run` fires N sessions with realistic Poisson timing but exits after all sessions complete. `start` runs the daemon indefinitely until stopped. Both respect the scheduler's timing model — `run` is not "fire N sessions immediately."
+
 ```bash
-# On-demand session
+# On-demand session (fires 10 sessions with realistic timing, then exits)
 murmurate run --sessions 10
 
 # Start daemon
@@ -310,7 +336,7 @@ murmurate plugins info google
 
 **Responsible defaults:**
 - Conservative rate limits out of the box — won't trigger abuse detection
-- `robots.txt` awareness — plugins respect crawl directives by default (overridable)
+- `robots.txt` handling: **ignored by default** (matching real browser behavior — real users never check robots.txt). Optional `respect_robots_txt = true` in config for users who prefer the ethical-crawler default. Note: respecting robots.txt can actually *reduce* realism and make traffic identifiable, since real browsers visit disallowed paths freely.
 - Bandwidth cap prevents saturating connections
 - No data exfiltration — search results are parsed for persona evolution only, never stored or transmitted
 
@@ -347,6 +373,237 @@ Murmurate builds on ideas from the following projects and research:
 - Roca et al., "FPRandom: Randomizing core browser objects to break advanced device fingerprinting techniques" (ESSoS 2017)
 - EFF, "Limitations of ISP Data Pollution Tools" (2017) — [eff.org/deeplinks/2017/05/limitations-isp-data-pollution-tools](https://www.eff.org/deeplinks/2017/05/limitations-isp-data-pollution-tools)
 
+## Data Models
+
+### Core Types
+
+```python
+@dataclass
+class TopicNode:
+    topic: str                    # e.g., "hand planes"
+    depth: int                    # 0 = seed, 1 = first-level subtopic, etc.
+    children: list[TopicNode]     # subtopics discovered from search results
+    query_count: int              # how many times this node has been used in a session
+    last_used: str | None         # ISO 8601 timestamp, or None if never used
+
+@dataclass
+class PersonaState:
+    name: str                     # e.g., "woodworker"
+    version: int                  # schema version for forward compatibility
+    seeds: list[str]              # original seed interests
+    topic_tree: list[TopicNode]   # root nodes (one per seed)
+    created_at: str               # ISO 8601
+    total_sessions: int
+    expertise_level: float        # 0.0 (beginner) to 1.0 (expert), derived from total_sessions and tree depth
+
+@dataclass
+class SessionContext:
+    persona: PersonaState
+    queries: list[str]            # pre-built query sequence (3-8 queries)
+    current_query_index: int
+    topic_branch: TopicNode       # the branch being explored
+    expertise_level: float        # persona's current expertise (affects query specificity)
+    prior_results: list[str]      # titles/snippets from earlier queries in this session
+    session_id: str               # UUID for logging
+
+@dataclass
+class BrowsingSession:
+    session_id: str               # UUID
+    persona_name: str
+    plugin_name: str              # which site plugin handles this session
+    context: SessionContext
+    transport_type: TransportType # HTTP or BROWSER
+    estimated_duration_s: int
+    scheduled_at: str             # ISO 8601
+
+@dataclass
+class SearchResult:
+    title: str
+    url: str
+    snippet: str                  # description text from the search result
+    position: int                 # rank on the results page
+
+@dataclass
+class BrowseAction:
+    url_visited: str
+    dwell_time_s: float           # how long the transport "read" the page
+    links_found: list[str]        # outbound links (for potential follow-through)
+    content_snippets: list[str]   # extracted text for topic evolution (titles, headings, related terms)
+    status_code: int
+
+@dataclass
+class SessionResult:
+    session_id: str
+    persona_name: str
+    plugin_name: str
+    transport_type: TransportType
+    queries_executed: int
+    results_browsed: int
+    total_duration_s: float
+    new_subtopics: list[str]      # topics extracted for tree evolution
+    errors: list[str]             # any non-fatal errors encountered
+    completed_at: str             # ISO 8601
+    machine_id: str
+
+class TransportType(Enum):
+    HTTP = "http"
+    BROWSER = "browser"
+    EITHER = "either"
+```
+
+### Persona JSON Schema (on disk)
+
+```json
+{
+  "name": "woodworker",
+  "version": 1,
+  "seeds": ["woodworking"],
+  "created_at": "2026-03-12T10:00:00Z",
+  "total_sessions": 47,
+  "topic_tree": [
+    {
+      "topic": "woodworking",
+      "depth": 0,
+      "query_count": 12,
+      "last_used": "2026-03-12T14:30:00Z",
+      "children": [
+        {
+          "topic": "hand planes",
+          "depth": 1,
+          "query_count": 5,
+          "last_used": "2026-03-11T20:15:00Z",
+          "children": [
+            {
+              "topic": "Stanley No. 4 restoration",
+              "depth": 2,
+              "query_count": 2,
+              "last_used": "2026-03-10T09:45:00Z",
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### SQLite State Database Schema (`local/state.db`)
+
+```sql
+-- Session history (powers `murmurate history` and stats)
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,           -- UUID
+    persona_name TEXT NOT NULL,
+    plugin_name TEXT NOT NULL,
+    transport_type TEXT NOT NULL,   -- 'http' or 'browser'
+    queries_executed INTEGER,
+    results_browsed INTEGER,
+    duration_s REAL,
+    machine_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,       -- ISO 8601
+    completed_at TEXT,
+    status TEXT DEFAULT 'running'   -- 'running', 'completed', 'failed', 'cancelled'
+);
+
+-- Per-domain rate limit tracking (sliding window)
+CREATE TABLE rate_limits (
+    domain TEXT NOT NULL,
+    request_time TEXT NOT NULL,     -- ISO 8601
+    PRIMARY KEY (domain, request_time)
+);
+
+-- Index for efficient window queries
+CREATE INDEX idx_rate_limits_domain_time ON rate_limits (domain, request_time);
+
+-- Periodic cleanup: DELETE FROM rate_limits WHERE request_time < datetime('now', '-1 hour');
+```
+
+## Error Handling
+
+**Transport failures:**
+- HTTP errors (429, 503, timeout): exponential backoff with jitter, max 3 retries per request. After 3 failures, skip that query in the session and log it.
+- If HTTP gets a bot challenge (CAPTCHA page detected via heuristic — e.g., page contains "verify you are human" patterns), escalate to BrowserTransport for that domain for the rest of the session.
+- Playwright crash (browser process dies): log the error, discard the session, remove the crashed context from the pool, and create a fresh one. Do not retry the session — the scheduler will generate new sessions naturally.
+- DNS resolution failure: skip the domain, log it, continue with other sessions. After 5 consecutive DNS failures across any domain, pause all sessions for 60s and check connectivity.
+
+**Plugin exceptions:**
+- Plugins run in a try/except wrapper. An unhandled exception in a plugin kills that session only — logged with full traceback. The plugin remains available for future sessions.
+- If a plugin fails 5 consecutive sessions, it is temporarily disabled for 1 hour with a warning log. After the cooldown, it is re-enabled automatically.
+
+**Database errors:**
+- SQLite locked (e.g., another process accessing the file): retry with backoff up to 3 times. If still locked, skip logging for that session and continue — session execution is not blocked by logging failures.
+- Schema migration failures on startup: refuse to start, print error and migration instructions.
+
+**Graceful degradation:**
+- If Playwright is not installed (`playwright` import fails), run in HTTP-only mode with a startup warning. All plugins with `preferred_transport = BROWSER` fall back to HTTP where possible, or are disabled.
+- If the config directory is missing or unreadable, refuse to start with a clear error message pointing to setup instructions.
+- If persona files are corrupted (invalid JSON), skip that persona, log a warning, and continue with remaining personas. If all personas are corrupted, fall back to auto-generated personas.
+
+## Daemon Lifecycle
+
+**Daemonization:**
+- Murmurate does **not** self-daemonize (no double-fork). On macOS, use the generated launchd plist (`murmurate install-daemon`). On Linux, use the generated systemd unit (`murmurate install-daemon --systemd`).
+- `murmurate start` runs the process in the foreground (suitable for launchd/systemd management). It writes `local/daemon.pid` on startup.
+- `murmurate start --background` is a convenience wrapper that launches the process in the background via `nohup` and writes the PID file. This is the fallback for systems without launchd/systemd.
+
+**PID file management:**
+- On startup: check if `local/daemon.pid` exists. If it does, check if the PID is still running (`os.kill(pid, 0)`). If running, refuse to start ("already running, use `murmurate stop` first"). If stale (process gone), remove the PID file and proceed.
+- On clean shutdown: remove the PID file.
+
+**Signal handling:**
+- `SIGTERM`: graceful shutdown — stop scheduling new sessions, wait up to 30s for in-flight sessions to complete, then exit. This is what `murmurate stop` sends.
+- `SIGINT` (Ctrl+C): immediate shutdown — cancel in-flight sessions, close browser contexts, exit.
+- `SIGHUP`: reload `config.toml` and persona files without restarting. Log what changed.
+
+**`murmurate stop`:**
+- Reads PID from `local/daemon.pid`, sends `SIGTERM`, waits up to 30s for exit. If still running after 30s, sends `SIGKILL` and warns.
+
+## Logging & Observability
+
+**Log location:** `{config_dir}/local/murmurate.log`
+
+**Log format:** Structured JSON lines (one JSON object per line) for machine parsing, with a human-readable `--log-format text` option.
+
+```json
+{"ts": "2026-03-12T14:30:00Z", "level": "INFO", "event": "session_complete", "session_id": "abc-123", "persona": "woodworker", "plugin": "google", "transport": "http", "queries": 5, "duration_s": 127.3, "machine_id": "roguenode"}
+```
+
+**Log levels:** DEBUG, INFO, WARNING, ERROR
+- INFO: session start/complete, daemon start/stop, persona evolution events
+- WARNING: rate limit hits, plugin temporary failures, stale PID detected
+- ERROR: transport crashes, plugin disabled, database errors
+- DEBUG: individual query execution, timing calculations, topic tree mutations
+
+**Log rotation:** Managed by the OS (logrotate on Linux, newsyslog on macOS via the generated plist). Murmurate does not rotate its own logs — it writes to the file and trusts the system to manage it. The `install-daemon` command configures rotation as part of setup.
+
+**`murmurate status` output:**
+```
+Murmurate v0.1.0 — running (PID 12345, since 2026-03-12 07:00)
+Machine: roguenode
+Config: ~/Library/Mobile Documents/com~apple~CloudDocs/murmurate/
+
+Sessions today: 34 (18 HTTP, 16 browser)
+Active sessions: 2
+Next scheduled: 14:37 (persona: woodworker, plugin: amazon)
+
+Personas: 5 active (woodworker: 47 sessions, amateur-chef: 31, ...)
+Plugins: 6 enabled (google, duckduckgo, youtube, amazon, reddit, wikipedia)
+Browser pool: 1/2 contexts in use
+```
+
+**`murmurate stats` output (self-assessment):**
+```
+Traffic distribution (last 7 days):
+  Sessions: 156 total (avg 22.3/day)
+  Timing: mean gap 14.2min, stddev 8.7min (Poisson λ=4.2/hr)
+  Peak hours: 10:15, 20:30 (configured: 10:00, 20:00)
+  Transport split: 68% HTTP, 32% browser (configured: 70/30)
+  Plugin distribution: google 28%, youtube 19%, amazon 18%, reddit 15%, ...
+  Topic diversity: 23 unique branches explored, 4 new subtopics added
+  Errors: 3 (2x rate limit, 1x DNS timeout)
+```
+
 ## Tech Stack
 
 | Component | Technology |
@@ -357,6 +614,7 @@ Murmurate builds on ideas from the following projects and research:
 | Browser automation | Playwright (async API) |
 | CLI framework | Click |
 | Configuration | TOML (tomllib stdlib + tomli-w for writing) |
+| Topic extraction | scikit-learn (TfidfVectorizer) |
 | Local state | SQLite (aiosqlite) |
 | Daemon (macOS) | launchd plist generation |
 | Daemon (Linux) | systemd unit generation |
