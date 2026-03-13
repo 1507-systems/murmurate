@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 # List of bundled plugin module paths. Add entries here as plugins are built.
 # Each module must contain at least one concrete SitePlugin subclass.
 BUNDLED_PLUGINS: list[str] = [
-    # "murmurate.plugins.duckduckgo",  # Added in Task 14
-    # "murmurate.plugins.wikipedia",   # Added in Task 14
+    "murmurate.plugins.duckduckgo",  # Added in Task 14
+    "murmurate.plugins.wikipedia",   # Added in Task 14
 ]
 
 

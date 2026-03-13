@@ -120,21 +120,37 @@ def test_all_plugins_property(registry):
 # Bundled plugin loading
 # ---------------------------------------------------------------------------
 
-def test_load_bundled_empty_list_returns_zero(registry):
-    # BUNDLED_PLUGINS is empty by default; should load zero plugins
+def test_load_bundled_loads_all_bundled_plugins(registry):
+    # BUNDLED_PLUGINS now contains duckduckgo and wikipedia (added in Task 14)
     count = registry.load_bundled()
-    assert count == 0
+    assert count == len(__import__("murmurate.plugins.registry", fromlist=["BUNDLED_PLUGINS"]).BUNDLED_PLUGINS)
+    assert registry.get_plugin("duckduckgo") is not None
+    assert registry.get_plugin("wikipedia") is not None
+
+
+def test_load_bundled_empty_list_returns_zero(registry):
+    # Verify that an empty BUNDLED_PLUGINS list returns zero
+    import murmurate.plugins.registry as reg_mod
+    original = reg_mod.BUNDLED_PLUGINS[:]
+    reg_mod.BUNDLED_PLUGINS.clear()
+    try:
+        count = registry.load_bundled()
+        assert count == 0
+    finally:
+        reg_mod.BUNDLED_PLUGINS[:] = original
 
 
 def test_load_bundled_skips_bad_module(registry, caplog):
-    # Temporarily inject a bad module name so we can test error handling
+    # Temporarily inject a bad module name so we can test error handling.
+    # The good bundled modules still load; only the bad one is skipped.
     import murmurate.plugins.registry as reg_mod
     original = reg_mod.BUNDLED_PLUGINS[:]
     reg_mod.BUNDLED_PLUGINS.append("murmurate.plugins._does_not_exist_xyz")
     try:
         with caplog.at_level("WARNING"):
             count = registry.load_bundled()
-        assert count == 0
+        # Good modules loaded; bad one skipped → count equals original length
+        assert count == len(original)
         assert any("_does_not_exist_xyz" in r.message for r in caplog.records)
     finally:
         reg_mod.BUNDLED_PLUGINS[:] = original

@@ -40,3 +40,7 @@ packages = ["src/murmurate"]
 # without needing @pytest.mark.asyncio on each one
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Ensure src/ is on the path so `import murmurate` works even when the editable
+# install's .pth file is not processed (which can happen when the project path
+# contains spaces, as with iCloud Drive locations on macOS).
+pythonpath = ["src"]
