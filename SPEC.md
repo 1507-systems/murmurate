@@ -61,11 +61,11 @@ The result: noise that looks, statistically, like signal.
 
 ```
 +-----------+-------------------------+-------------+
-|                  CLI / Daemon                      |
-|             (Click + launchd plist)                |
+|                 CLI / Daemon                       |
+|            (Click + launchd plist)                 |
 +-----------+-------------------------+-------------+
-|                   Scheduler                        |
-|        (Poisson timing + circadian model)          |
+|                  Scheduler                         |
+|       (Poisson timing + circadian model)           |
 +-----------+-------------------------+-------------+
 |  Persona  |     Transport Layer     |   Plugin    |
 |  Engine   |  +---------+---------+  |   Registry  |
@@ -73,8 +73,8 @@ The result: noise that looks, statistically, like signal.
 |           |  |(aiohttp)|(Playwrt)|  |             |
 |           |  +---------+---------+  |             |
 +-----------+-------------------------+-------------+
-|            Config (shared / local)                 |
-|       ~/.config/murmurate/ or custom               |
+|           Config (shared / local)                  |
+|      ~/.config/murmurate/ or custom                |
 +-----------+-------------------------+-------------+
 ```
 
