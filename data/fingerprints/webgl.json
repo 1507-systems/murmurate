@@ -1,0 +1,36 @@
+{
+  "windows": [
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.15},
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.12},
+    {"vendor": "Google Inc. (AMD)", "renderer": "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.10},
+    {"vendor": "Google Inc. (Intel)", "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.15},
+    {"vendor": "Google Inc. (Intel)", "renderer": "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.12},
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.10},
+    {"vendor": "Google Inc. (AMD)", "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.13},
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2060 Direct3D11 vs_5_0 ps_5_0, D3D11)", "weight": 0.13}
+  ],
+  "macos": [
+    {"vendor": "Apple", "renderer": "Apple M1", "weight": 0.25},
+    {"vendor": "Apple", "renderer": "Apple M1 Pro", "weight": 0.20},
+    {"vendor": "Apple", "renderer": "Apple M2", "weight": 0.20},
+    {"vendor": "Apple", "renderer": "Apple M2 Pro", "weight": 0.15},
+    {"vendor": "Apple", "renderer": "Apple M3", "weight": 0.10},
+    {"vendor": "Apple", "renderer": "Apple M3 Pro", "weight": 0.10}
+  ],
+  "linux": [
+    {"vendor": "Mesa", "renderer": "Mesa Intel(R) UHD Graphics 630 (CFL GT2)", "weight": 0.25},
+    {"vendor": "Mesa", "renderer": "AMD Radeon RX 580 (RADV POLARIS10)", "weight": 0.20},
+    {"vendor": "Mesa", "renderer": "NVIDIA GeForce GTX 1080/PCIe/SSE2", "weight": 0.20},
+    {"vendor": "Mesa", "renderer": "llvmpipe (LLVM 15.0.7, 256 bits)", "weight": 0.15},
+    {"vendor": "Mesa", "renderer": "AMD Radeon RX 6700 XT (RADV NAVI22)", "weight": 0.20}
+  ],
+  "android": [
+    {"vendor": "Qualcomm", "renderer": "Adreno (TM) 730", "weight": 0.35},
+    {"vendor": "Qualcomm", "renderer": "Adreno (TM) 660", "weight": 0.30},
+    {"vendor": "ARM", "renderer": "Mali-G78", "weight": 0.20},
+    {"vendor": "ARM", "renderer": "Mali-G710", "weight": 0.15}
+  ],
+  "ios": [
+    {"vendor": "Apple Inc.", "renderer": "Apple GPU", "weight": 1.0}
+  ]
+}

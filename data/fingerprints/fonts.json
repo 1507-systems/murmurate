@@ -1,0 +1,7 @@
+{
+  "windows": ["Arial", "Calibri", "Cambria", "Consolas", "Courier New", "Georgia", "Impact", "Lucida Console", "Segoe UI", "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana", "Comic Sans MS", "Palatino Linotype"],
+  "macos": ["Helvetica Neue", "SF Pro", "Menlo", "Monaco", "Avenir", "Futura", "Gill Sans", "Lucida Grande", "Optima", "Palatino", "Times New Roman", "Arial", "Georgia", "Courier New", "American Typewriter"],
+  "linux": ["DejaVu Sans", "Liberation Sans", "Liberation Serif", "Liberation Mono", "Noto Sans", "Noto Serif", "Ubuntu", "Cantarell", "Droid Sans", "FreeSans", "FreeSerif", "FreeMono"],
+  "android": ["Roboto", "Noto Sans", "Droid Sans", "Droid Serif", "Droid Sans Mono", "Cutive Mono"],
+  "ios": ["SF Pro", "SF Mono", "New York", "Helvetica Neue", "Avenir", "Georgia", "Times New Roman", "Courier New"]
+}

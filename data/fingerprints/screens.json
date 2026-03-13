@@ -1,0 +1,33 @@
+{
+  "windows": [
+    {"width": 1920, "height": 1080, "viewport_width": 1920, "viewport_height": 937, "weight": 0.35},
+    {"width": 2560, "height": 1440, "viewport_width": 2560, "viewport_height": 1297, "weight": 0.15},
+    {"width": 1366, "height": 768, "viewport_width": 1366, "viewport_height": 625, "weight": 0.20},
+    {"width": 1536, "height": 864, "viewport_width": 1536, "viewport_height": 721, "weight": 0.15},
+    {"width": 3840, "height": 2160, "viewport_width": 3840, "viewport_height": 2017, "weight": 0.10},
+    {"width": 1440, "height": 900, "viewport_width": 1440, "viewport_height": 757, "weight": 0.05}
+  ],
+  "macos": [
+    {"width": 2560, "height": 1440, "viewport_width": 2560, "viewport_height": 1340, "weight": 0.30},
+    {"width": 1920, "height": 1080, "viewport_width": 1920, "viewport_height": 980, "weight": 0.20},
+    {"width": 1440, "height": 900, "viewport_width": 1440, "viewport_height": 800, "weight": 0.20},
+    {"width": 2880, "height": 1800, "viewport_width": 2880, "viewport_height": 1700, "weight": 0.15},
+    {"width": 3456, "height": 2234, "viewport_width": 3456, "viewport_height": 2134, "weight": 0.15}
+  ],
+  "linux": [
+    {"width": 1920, "height": 1080, "viewport_width": 1920, "viewport_height": 1003, "weight": 0.50},
+    {"width": 2560, "height": 1440, "viewport_width": 2560, "viewport_height": 1363, "weight": 0.25},
+    {"width": 1366, "height": 768, "viewport_width": 1366, "viewport_height": 691, "weight": 0.15},
+    {"width": 3840, "height": 2160, "viewport_width": 3840, "viewport_height": 2083, "weight": 0.10}
+  ],
+  "android": [
+    {"width": 412, "height": 915, "viewport_width": 412, "viewport_height": 823, "weight": 0.40},
+    {"width": 393, "height": 873, "viewport_width": 393, "viewport_height": 781, "weight": 0.30},
+    {"width": 360, "height": 800, "viewport_width": 360, "viewport_height": 716, "weight": 0.30}
+  ],
+  "ios": [
+    {"width": 390, "height": 844, "viewport_width": 390, "viewport_height": 763, "weight": 0.50},
+    {"width": 428, "height": 926, "viewport_width": 428, "viewport_height": 845, "weight": 0.30},
+    {"width": 375, "height": 812, "viewport_width": 375, "viewport_height": 731, "weight": 0.20}
+  ]
+}
