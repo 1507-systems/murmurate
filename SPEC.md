@@ -60,12 +60,12 @@ The result: noise that looks, statistically, like signal.
 ## Architecture
 
 ```
-+---------------------------------------------------+
-|                   CLI / Daemon                     |
-|              (Click + launchd plist)               |
-+---------------------------------------------------+
-|                    Scheduler                       |
-|         (Poisson timing + circadian model)         |
++-----------+-------------------------+-------------+
+|                  CLI / Daemon                      |
+|             (Click + launchd plist)                |
++-----------+-------------------------+-------------+
+|                   Scheduler                        |
+|        (Poisson timing + circadian model)          |
 +-----------+-------------------------+-------------+
 |  Persona  |     Transport Layer     |   Plugin    |
 |  Engine   |  +---------+---------+  |   Registry  |
@@ -73,9 +73,9 @@ The result: noise that looks, statistically, like signal.
 |           |  |(aiohttp)|(Playwrt)|  |             |
 |           |  +---------+---------+  |             |
 +-----------+-------------------------+-------------+
-|             Config (shared / local)               |
-|        ~/.config/murmurate/ or custom             |
-+---------------------------------------------------+
+|            Config (shared / local)                 |
+|       ~/.config/murmurate/ or custom               |
++-----------+-------------------------+-------------+
 ```
 
 - Single async Python process using `asyncio`
