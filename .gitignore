@@ -26,6 +26,9 @@ Thumbs.db
 # Local state (machine-specific, never sync)
 local/
 
+# Internal tooling artifacts
+docs/superpowers/
+
 # Environment
 .env
 .env.local
