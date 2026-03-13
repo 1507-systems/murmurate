@@ -320,6 +320,10 @@ murmurate personas add --name "gardener" --seeds "container gardening,herb growi
 # Show session history
 murmurate history --last 24h
 
+# Traffic stats and self-assessment
+murmurate stats
+murmurate stats --days 30
+
 # Plugin management
 murmurate plugins list
 murmurate plugins info google
