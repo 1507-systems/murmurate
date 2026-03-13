@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "murmurate"
+version = "0.1.0"
+description = "A privacy tool that generates decoy internet activity to obscure real browsing patterns"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.9",
+    "aiosqlite>=0.20",
+    "click>=8.1",
+    "tomli-w>=1.0",
+    "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+# Browser automation support — optional because Playwright binaries are large
+# and not needed for HTTP-only transport
+browser = [
+    "playwright>=1.40",
+]
+# Development tools: testing, coverage, async test support, HTTP mocking
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "aioresponses>=0.7",
+]
+
+[project.scripts]
+murmurate = "murmurate.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/murmurate"]
+
+[tool.pytest.ini_options]
+# Auto mode means all async test functions are treated as coroutines automatically
+# without needing @pytest.mark.asyncio on each one
+asyncio_mode = "auto"
+testpaths = ["tests"]
