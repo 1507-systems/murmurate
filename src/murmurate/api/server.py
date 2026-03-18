@@ -133,7 +133,7 @@ async def handle_status(request: web.Request) -> web.Response:
     if state.db:
         try:
             sessions = await state.db.get_session_history(limit=10000)
-            from datetime import datetime, timezone, timedelta
+            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
             today_sessions = [s for s in sessions if s.get("started_at", "") >= today_start]

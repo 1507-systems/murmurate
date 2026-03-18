@@ -1,8 +1,7 @@
 import os
 import signal
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from murmurate.daemon.lifecycle import (
     write_pid, read_pid, is_running, check_already_running,
     setup_signal_handlers, stop_daemon, cleanup_pid,

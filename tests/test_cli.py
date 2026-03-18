@@ -8,7 +8,6 @@ database, transports, and plugins — that belongs in integration tests.
 
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock, AsyncMock
 from murmurate.cli import cli
 
 

@@ -6,14 +6,10 @@ that their fields behave as expected (defaults, mutability, enum values).
 No I/O or async operations are needed here — pure in-memory construction.
 """
 
-import pytest
 from murmurate.models import (
-    BrowseAction,
-    BrowsingSession,
     FingerprintProfile,
     PersonaState,
     SearchResult,
-    SessionContext,
     SessionResult,
     TopicNode,
     TransportType,

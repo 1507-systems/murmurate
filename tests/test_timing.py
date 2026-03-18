@@ -1,4 +1,3 @@
-import pytest
 import random
 from datetime import datetime
 from murmurate.scheduler.timing import TimingModel

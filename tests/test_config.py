@@ -11,7 +11,6 @@ Tests are written first (TDD). They cover:
   - Unknown TOML fields are silently ignored
 """
 
-import os
 import textwrap
 from pathlib import Path
 

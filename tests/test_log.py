@@ -15,14 +15,14 @@ from murmurate.log import get_logger, setup_logging
 
 def _last_json_line(log_file) -> dict:
     """Read the last non-empty line of *log_file* and parse it as JSON."""
-    lines = [l for l in log_file.read_text().splitlines() if l.strip()]
+    lines = [line for line in log_file.read_text().splitlines() if line.strip()]
     assert lines, "Log file is empty"
     return json.loads(lines[-1])
 
 
 def _all_json_lines(log_file) -> list[dict]:
-    lines = [l for l in log_file.read_text().splitlines() if l.strip()]
-    return [json.loads(l) for l in lines]
+    lines = [line for line in log_file.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in lines]
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ def test_text_format_not_json(tmp_path):
     setup_logging(log_file, level="INFO", json_format=False)
     get_logger("notjson").info("plain text")
 
-    lines = [l for l in log_file.read_text().splitlines() if l.strip()]
+    lines = [entry for entry in log_file.read_text().splitlines() if entry.strip()]
     for line in lines:
         with pytest.raises(json.JSONDecodeError):
             json.loads(line)

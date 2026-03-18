@@ -164,13 +164,6 @@ class PersonaEngine:
         # Depth hint: child nodes represent more specific sub-topics, so we give
         # extra context in the refined queries when the branch is deeper in the tree.
         if branch.depth > 0:
-            parent_context_suffixes = [
-                f"{topic} tips",
-                f"best {topic}",
-                f"{topic} tutorial",
-                f"how to use {topic}",
-                f"{topic} for woodworking",  # generic "parent topic area" reference
-            ]
             refined_suffixes = [f"{topic} tutorial", f"best {topic}"] + refined_suffixes
 
         # Build the sequence: first query is always broad, remaining queries

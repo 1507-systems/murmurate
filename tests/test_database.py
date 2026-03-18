@@ -18,12 +18,12 @@ async def db():
 
 async def test_initialize_creates_tables(db):
     """After initialize(), both required tables must exist in the schema."""
-    async with aiosqlite.connect(":memory:") as conn:
+    async with aiosqlite.connect(":memory:"):
         # Use a separate connection to verify via a fresh DB instance
         pass
 
     # Verify via the db's internal connection that tables exist
-    async with aiosqlite.connect(":memory:") as fresh:
+    async with aiosqlite.connect(":memory:"):
         new_db = StateDB(":memory:")
         await new_db.initialize()
 
@@ -135,7 +135,6 @@ async def test_rate_limit_count_different_domains(db):
 
 async def test_rate_limit_cleanup(db):
     """cleanup_rate_limits() should remove entries older than max_age_seconds."""
-    import asyncio
     from datetime import datetime, timezone, timedelta
 
     domain = "cleanup-test.com"

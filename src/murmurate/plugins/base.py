@@ -15,8 +15,12 @@ and transport — annotations-mode defers the evaluation of that reference.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from murmurate.models import BrowseAction, SearchResult, SessionContext, TransportType
+
+if TYPE_CHECKING:
+    from murmurate.transport.base import Transport
 
 
 class SitePlugin(ABC):

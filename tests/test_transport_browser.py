@@ -8,12 +8,12 @@ init_script → goto → dwell → content → release).
 """
 
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock
 
 import pytest
 
 from murmurate.models import FingerprintProfile
-from murmurate.transport.pool import BrowserPool, PooledContext
+from murmurate.transport.pool import BrowserPool
 
 
 # ---------------------------------------------------------------------------

@@ -9,11 +9,11 @@ cleanup, and fresh profile isolation (no cookie bleed between contexts).
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from murmurate.transport.pool import BrowserPool, PooledContext
+from murmurate.transport.pool import BrowserPool
 from murmurate.models import FingerprintProfile
 
 
@@ -211,8 +211,6 @@ async def test_rotated_context_is_closed():
 async def test_pool_rotates_after_max_age():
     """A context older than max_age_s should be rotated out on release."""
     browser, _, _ = _mock_browser()
-    old_ctx = AsyncMock()
-    new_ctx_mock = AsyncMock()
     calls = []
 
     async def new_ctx(**kwargs):

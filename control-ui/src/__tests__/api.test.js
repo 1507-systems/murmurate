@@ -5,7 +5,7 @@
  * and error handling without hitting a real server.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   configure,
   getStatus,
@@ -16,10 +16,8 @@ import {
   deletePersona,
   getHistory,
   getStats,
-  getPlugins,
   enablePlugin,
   disablePlugin,
-  getConfig,
   updateConfig,
 } from '../api'
 

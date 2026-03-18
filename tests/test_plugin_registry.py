@@ -6,13 +6,12 @@ failure tracking with auto-disable, cooldown expiry, and plugin info output.
 """
 
 import textwrap
-import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from murmurate.models import BrowseAction, SearchResult, SessionContext, TransportType
+from murmurate.models import TransportType
 from murmurate.plugins.base import SitePlugin
 from murmurate.plugins.registry import PluginRegistry
 

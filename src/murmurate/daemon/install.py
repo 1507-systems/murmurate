@@ -1,6 +1,5 @@
 """Generate and install daemon service files."""
 
-import shutil
 import sys
 from pathlib import Path
 
