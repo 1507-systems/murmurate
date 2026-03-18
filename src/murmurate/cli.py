@@ -84,7 +84,11 @@ def run(sessions, config_dir, log_format):
 @cli.command()
 @click.option("--config-dir", type=click.Path(exists=False), default=None)
 @click.option("--log-format", type=click.Choice(["json", "text"]), default="json")
-def start(config_dir, log_format):
+@click.option("--api/--no-api", default=False, help="Enable the REST API server")
+@click.option("--api-port", type=int, default=7683, help="API server port")
+@click.option("--api-host", default="127.0.0.1", help="API server bind address")
+@click.option("--api-token", default=None, help="Bearer token for API auth")
+def start(config_dir, log_format, api, api_port, api_host, api_token):
     """Start the daemon (foreground, for use with launchd/systemd)."""
     from murmurate.config import load_config, resolve_config_dir
     from murmurate.log import setup_logging
@@ -102,9 +106,93 @@ def start(config_dir, log_format):
 
     write_pid(pid_file)
     try:
-        asyncio.run(_run_sessions(config, config_path, None))
+        if api:
+            asyncio.run(_run_with_api(config, config_path, api_host, api_port, api_token))
+        else:
+            asyncio.run(_run_sessions(config, config_path, None))
     finally:
         cleanup_pid(pid_file)
+
+
+async def _run_with_api(config, config_dir: Path, host: str, port: int, token: str | None) -> None:
+    """Start the API server alongside the daemon scheduler.
+
+    Both the scheduler and the API server share the same event loop. The API
+    server gets references to the live scheduler, database, and plugin registry
+    so it can serve real-time data without IPC.
+    """
+    from aiohttp import web
+    from murmurate.api.server import ApiState, create_app
+    from murmurate.database import StateDB
+    from murmurate.persona.engine import PersonaEngine
+    from murmurate.persona.storage import load_all_personas
+    from murmurate.plugins.registry import PluginRegistry
+    from murmurate.scheduler.timing import TimingModel
+    from murmurate.scheduler.rate_limiter import RateLimiter
+    from murmurate.scheduler.scheduler import Scheduler
+    from murmurate.transport.http import HttpTransport
+
+    db = StateDB(config_dir / "state.db")
+    await db.initialize()
+
+    personas = load_all_personas(config_dir / "personas")
+
+    registry = PluginRegistry()
+    registry.load_bundled()
+    registry.load_user_plugins(config_dir / "plugins")
+
+    http = HttpTransport(config=config)
+    await http.start()
+
+    timing = TimingModel(config.scheduler)
+    rate_limiter = RateLimiter(db)
+    engine = PersonaEngine()
+
+    scheduler = Scheduler(
+        config=config,
+        personas=personas,
+        registry=registry,
+        http_transport=http,
+        browser_transport=None,
+        db=db,
+        timing=timing,
+        rate_limiter=rate_limiter,
+        persona_engine=engine,
+    )
+
+    # Build the API server with shared state
+    api_state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=db,
+        registry=registry,
+        scheduler=scheduler,
+        api_token=token,
+    )
+    app = create_app(api_state)
+
+    # Start the API server as a background task
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host, port)
+    await site.start()
+
+    import logging
+    logging.getLogger(__name__).info("API server listening on http://%s:%d", host, port)
+
+    try:
+        if personas:
+            results = await scheduler.run(max_sessions=None)
+            click.echo(f"Completed {len(results)} sessions.")
+        else:
+            click.echo("No personas found. API server running — create personas via the UI.")
+            # Keep running so the API server stays alive
+            while True:
+                await asyncio.sleep(60)
+    finally:
+        await runner.cleanup()
+        await http.stop()
+        await db.close()
 
 
 async def _run_sessions(config, config_dir: Path, max_sessions: int | None) -> None:
@@ -158,6 +246,70 @@ async def _run_sessions(config, config_dir: Path, max_sessions: int | None) -> N
         click.echo(f"Completed {len(results)} sessions.")
     finally:
         await http.stop()
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# api command (standalone API server without scheduler)
+# ---------------------------------------------------------------------------
+
+@cli.command("api")
+@click.option("--config-dir", type=click.Path(exists=False), default=None)
+@click.option("--port", type=int, default=7683, help="API server port")
+@click.option("--host", default="127.0.0.1", help="API server bind address")
+@click.option("--api-token", default=None, help="Bearer token for API auth")
+def api_server(config_dir, port, host, api_token):
+    """Run the Control UI API server (without the scheduler)."""
+    from murmurate.config import load_config, resolve_config_dir
+
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+    config = load_config(config_path)
+    asyncio.run(_run_api_only(config, config_path, host, port, api_token))
+
+
+async def _run_api_only(config, config_dir: Path, host: str, port: int, token: str | None) -> None:
+    """Run just the API server — no scheduler, no session execution.
+
+    Useful for managing personas, viewing history, and editing config
+    when you don't want to actually generate traffic.
+    """
+    from aiohttp import web
+    from murmurate.api.server import ApiState, create_app
+    from murmurate.database import StateDB
+    from murmurate.plugins.registry import PluginRegistry
+
+    db = StateDB(config_dir / "state.db")
+    await db.initialize()
+
+    registry = PluginRegistry()
+    registry.load_bundled()
+    registry.load_user_plugins(config_dir / "plugins")
+
+    api_state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=db,
+        registry=registry,
+        scheduler=None,
+        api_token=token,
+    )
+    app = create_app(api_state)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host, port)
+    await site.start()
+
+    click.echo(f"Murmurate Control UI API running on http://{host}:{port}")
+    click.echo("Press Ctrl+C to stop.")
+
+    try:
+        while True:
+            await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await runner.cleanup()
         await db.close()
 
 

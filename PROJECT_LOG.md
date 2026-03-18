@@ -96,3 +96,75 @@ Project declared production-ready at v0.1.0.
 - Security vulnerabilities: 0 (critical/high/moderate)
 - Dead code: removed
 - Documentation: complete and accurate
+
+---
+
+## 2026-03-18 — Control UI Implementation
+
+### What was built
+
+Web-based control UI for managing Murmurate instances, implemented as:
+1. **REST API server** (`src/murmurate/api/`) — embedded aiohttp server that shares the daemon's event loop and state objects
+2. **React frontend** (`control-ui/`) — Vite + React + Tailwind CSS v4 single-page application
+3. **CLI integration** — `murmurate api` standalone command + `murmurate start --api` flag
+
+### API Server (`src/murmurate/api/`)
+
+- **server.py**: 16 REST endpoints covering all daemon operations
+  - `GET /api/status` — daemon state, session counts
+  - `POST /api/daemon/stop` — graceful shutdown
+  - `GET/POST/PUT/DELETE /api/personas` — full CRUD for personas
+  - `GET /api/history` — session history with limit parameter
+  - `GET /api/stats` — activity statistics with plugin/transport/daily breakdowns
+  - `GET /api/plugins`, `POST /api/plugins/{name}/enable|disable` — plugin management
+  - `GET/PUT /api/config` — configuration read and live update (writes config.toml, hot-reloads)
+- **middleware.py**: CORS (permissive for local/LAN use) + bearer token auth
+- **ApiState**: Bridge object holding references to config, DB, registry, scheduler — no IPC needed
+- Serves the built React app as static files, with SPA fallback routing
+
+### React Frontend (`control-ui/`)
+
+- **Dashboard**: Status cards, plugin distribution bars, daily activity chart
+- **Personas**: Table view, detail panel with topic tree visualization, create/delete modals
+- **History**: Auto-refreshing session table with status badges, transport info, timing
+- **Plugins**: Enable/disable toggles, rate limit and transport info, failure tracking
+- **Config**: Structured form editor for all config sections, live save to daemon
+- **Components**: Card, StatCard, Button, StatusBadge, Modal — reusable dark-themed UI kit
+- **API client** (`api.js`): Centralized fetch wrapper with auth, custom base URL support
+- **Hooks**: `useApi` and `usePolling` for data fetching with auto-refresh
+
+### CLI Changes
+
+- `murmurate start` gains `--api`, `--api-port`, `--api-host`, `--api-token` flags
+- New `murmurate api` command: runs API server standalone (no scheduler) for UI-only mode
+- Default API port: 7683
+
+### Architecture Decisions
+
+- API server embedded in daemon process — avoids IPC, shares same event loop and objects
+- Bearer token auth — simple, stateless, good enough for LAN/VPN use
+- No auth required when bound to 127.0.0.1 (local-only mode)
+- Persona deletion uses `~/.Trash/` per project convention (never `rm`)
+- Config updates write TOML to disk and reload in memory (equivalent to SIGHUP)
+- Static SPA served by the API server itself in production; Vite proxy during dev
+
+### Tests
+
+- **Python API tests** (`tests/test_api_server.py`): 30 tests covering all endpoints, CORS, auth middleware, helper functions
+- **React component tests** (`control-ui/src/__tests__/components.test.jsx`): Card, Button, StatusBadge, Modal
+- **React API client tests** (`control-ui/src/__tests__/api.test.js`): All API functions, auth, error handling
+- **React App tests** (`control-ui/src/__tests__/App.test.jsx`): Navigation, page rendering, daemon status
+- **Total**: 380 Python tests passing (350 original + 30 new), 38 frontend tests passing
+
+### Current State
+
+- API server and frontend are fully functional
+- Production build: 213KB JS + 18KB CSS (gzipped: 65KB + 4KB)
+- No security audit performed yet (would need `/full-audit` before production declaration)
+
+### Next Steps
+
+- macOS menu bar app (rumps) — design brief mentions this as phase 2
+- WebSocket/SSE for real-time session updates (currently uses polling)
+- mDNS/Bonjour for automatic instance discovery on LAN
+- Multi-instance dashboard (single UI managing multiple Murmurate daemons)
