@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "murmurate"
-version = "0.1.0"
+version = "0.2.0"
 description = "A privacy tool that generates decoy internet activity to obscure real browsing patterns"
 requires-python = ">=3.11"
 dependencies = [

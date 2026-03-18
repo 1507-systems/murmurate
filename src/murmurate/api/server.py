@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -68,10 +69,20 @@ def create_app(state: "ApiState") -> web.Application:
 
 def _make_spa_handler(static_dir: Path):
     """Return a handler that serves index.html for SPA client-side routing."""
+    # Resolve once at startup so all comparisons use the same canonical form
+    resolved_root = static_dir.resolve()
+
     async def handle_spa(request: web.Request) -> web.Response:
         # Try to serve the exact file first (for assets like favicon, etc.)
-        file_path = static_dir / request.match_info.get("path", "")
-        if file_path.is_file() and file_path.suffix:
+        file_path = (static_dir / request.match_info.get("path", "")).resolve()
+        # Guard against path traversal — the resolved path must stay inside
+        # the static directory.  Without this check a request containing ../
+        # sequences could read arbitrary files on disk.
+        if (
+            file_path.is_file()
+            and file_path.suffix
+            and str(file_path).startswith(str(resolved_root))
+        ):
             return web.FileResponse(file_path)
         # Fall back to index.html for client-side routing
         index = static_dir / "index.html"
@@ -126,7 +137,7 @@ async def handle_status(request: web.Request) -> web.Response:
     result = {
         "running": state.scheduler is not None,
         "config_dir": str(state.config_dir),
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
     # If we have a database, include recent session counts
@@ -189,6 +200,8 @@ async def handle_persona_detail(request: web.Request) -> web.Response:
     """GET /api/personas/{name} — Full persona detail including topic tree."""
     state: ApiState = request.app["state"]
     name = request.match_info["name"]
+    if err := _validate_persona_name(name):
+        return err
 
     from murmurate.persona.storage import load_persona
     persona_file = state.config_dir / "personas" / f"{name}.json"
@@ -219,6 +232,14 @@ async def handle_persona_create(request: web.Request) -> web.Response:
     name = body.get("name", "").strip()
     if not name:
         return _json_response({"error": "Name is required"}, status=400)
+
+    # Sanitise: persona names become filenames, so reject path separators
+    # and other dangerous characters to prevent directory traversal.
+    if not _SAFE_NAME_RE.match(name):
+        return _json_response(
+            {"error": "Name must contain only letters, numbers, hyphens, and underscores"},
+            status=400,
+        )
 
     # Check for name collisions
     persona_dir = state.config_dir / "personas"
@@ -262,6 +283,8 @@ async def handle_persona_update(request: web.Request) -> web.Response:
     """PUT /api/personas/{name} — Update persona seeds (limited edit surface)."""
     state: ApiState = request.app["state"]
     name = request.match_info["name"]
+    if err := _validate_persona_name(name):
+        return err
 
     persona_file = state.config_dir / "personas" / f"{name}.json"
     if not persona_file.exists():
@@ -299,6 +322,8 @@ async def handle_persona_delete(request: web.Request) -> web.Response:
     """DELETE /api/personas/{name} — Delete a persona file."""
     state: ApiState = request.app["state"]
     name = request.match_info["name"]
+    if err := _validate_persona_name(name):
+        return err
 
     persona_file = state.config_dir / "personas" / f"{name}.json"
     if not persona_file.exists():
@@ -322,7 +347,10 @@ async def handle_history(request: web.Request) -> web.Response:
     if not state.db:
         return _json_response({"error": "Database not available"}, status=503)
 
-    limit = int(request.query.get("limit", "50"))
+    try:
+        limit = max(1, min(int(request.query.get("limit", "50")), 10000))
+    except (ValueError, TypeError):
+        limit = 50
     sessions = await state.db.get_session_history(limit=limit)
     return _json_response(sessions)
 
@@ -333,7 +361,10 @@ async def handle_stats(request: web.Request) -> web.Response:
     if not state.db:
         return _json_response({"error": "Database not available"}, status=503)
 
-    days = int(request.query.get("days", "7"))
+    try:
+        days = max(1, min(int(request.query.get("days", "7")), 365))
+    except (ValueError, TypeError):
+        days = 7
     sessions = await state.db.get_session_history(limit=10000)
 
     from datetime import datetime, timezone, timedelta
@@ -490,6 +521,23 @@ async def handle_config_update(request: web.Request) -> web.Response:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_persona_name(name: str) -> web.Response | None:
+    """Return an error response if the name is unsafe, or None if it's valid.
+
+    Persona names are used to construct file paths, so we reject anything
+    containing path separators or special characters to prevent traversal.
+    """
+    if not name or not _SAFE_NAME_RE.match(name):
+        return _json_response(
+            {"error": "Invalid persona name — use only letters, numbers, hyphens, underscores"},
+            status=400,
+        )
+    return None
+
 
 def _count_nodes(nodes: list) -> int:
     """Count total nodes in a topic tree (recursive)."""

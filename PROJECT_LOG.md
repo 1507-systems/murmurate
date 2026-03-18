@@ -168,3 +168,86 @@ Web-based control UI for managing Murmurate instances, implemented as:
 - WebSocket/SSE for real-time session updates (currently uses polling)
 - mDNS/Bonjour for automatic instance discovery on LAN
 - Multi-instance dashboard (single UI managing multiple Murmurate daemons)
+
+---
+
+## Full Audit — v0.2.0 — 2026-03-18
+
+### Summary
+
+Full audit of v0.2.0 (v0.1.0 core + Control UI). Found and fixed 4 security
+issues in the API server. All tests passing, zero lint errors, zero
+vulnerabilities in dependencies.
+
+### Phase 1: Documentation
+
+- README.md, SPEC.md, PROJECT_LOG.md all accurate and up to date
+- Documented features verified in code — all endpoints, CLI flags, plugin system match docs
+- No outdated references found
+
+### Phase 2: Functionality
+
+- Python tests: 380 passing, 0 failing (pytest 8.80s)
+- React tests: 38 passing, 0 failing (vitest 1.29s)
+- Ruff: 0 errors
+- ESLint: 0 errors
+- React production build: 213KB JS + 18KB CSS (gzipped: 65KB + 4KB)
+- No TODO/FIXME/HACK/XXX in source
+- CI config updated to include control-ui job (ESLint, vitest, build)
+
+### Phase 3: Code Cleanup
+
+- No dead code or unused imports found
+- No unused variables
+- Error handling consistent across all API endpoints
+
+### Phase 4: Security
+
+**Issues found and fixed:**
+
+1. **Path traversal in SPA handler** (CRITICAL) — `_make_spa_handler` passed
+   user-controlled URL path directly to `Path()` without checking the resolved
+   path stayed inside `static_dir`. A request with `../` sequences could read
+   arbitrary files. Fixed by resolving the path and checking it starts with
+   the static root.
+
+2. **Path traversal via persona name** (HIGH) — Persona CRUD endpoints used
+   the URL parameter `{name}` directly in file path construction
+   (`personas/{name}.json`). A name like `../../etc/passwd` would escape the
+   personas directory. Fixed by adding `_validate_persona_name()` that rejects
+   any name not matching `^[a-zA-Z0-9_-]+$`, applied to all persona endpoints
+   (detail, create, update, delete).
+
+3. **Unvalidated query parameters** (LOW) — `limit` and `days` query params in
+   `/api/history` and `/api/stats` used raw `int()` conversion without bounds.
+   Malformed or extreme values could cause errors or resource abuse. Fixed with
+   try/except and clamping to sane ranges (limit: 1-10000, days: 1-365).
+
+4. **CI missing control-ui tests** (LOW) — GitHub Actions CI only ran Python
+   tests. Added a `control-ui` job for ESLint, vitest, and production build.
+
+**Verified clean:**
+
+- pip-audit: 0 vulnerabilities in project dependencies (aiohttp, aiosqlite, click, tomli-w, scikit-learn)
+- npm audit: 0 vulnerabilities in control-ui dependencies
+- No hardcoded secrets in source or git history
+- .gitignore covers .env, .env.local, local/, node_modules/, dist/
+- Bearer token auth enforced on all /api/ endpoints when configured
+- CORS permissive by design (documented: local/LAN use case, token is auth boundary)
+- Persona deletion uses ~/.Trash/ (no rm)
+- No eval/exec/subprocess injection vectors
+- User plugin loading via importlib is by-design (documented plugin mechanism)
+
+### Version Bump
+
+- `pyproject.toml`: 0.1.0 -> 0.2.0
+- `src/murmurate/__init__.py`: 0.1.0 -> 0.2.0
+- API `/api/status` version: 0.1.0 -> 0.2.0
+
+### Final State
+
+- Python tests: 380 passing, 0 failing
+- React tests: 38 passing, 0 failing
+- Lint errors: 0 (ruff + ESLint)
+- Security vulnerabilities: 0
+- Tagged: v0.2.0-audit-clean
