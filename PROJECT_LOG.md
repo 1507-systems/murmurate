@@ -251,3 +251,57 @@ vulnerabilities in dependencies.
 - Lint errors: 0 (ruff + ESLint)
 - Security vulnerabilities: 0
 - Tagged: v0.2.0-audit-clean
+
+---
+
+## 2026-03-22 — macOS Menu Bar App (Control UI Phase 2)
+
+### What was built
+
+macOS menu bar app using rumps (Ridiculously Uncomplicated macOS Python Statusbar apps) that provides tray-level control of the Murmurate daemon without opening a browser.
+
+### Files added
+
+- **`menubar/murmurate_menubar.py`** — Complete menu bar application (~360 lines)
+- **`menubar/run.sh`** — Launch script with auto-install of rumps
+- **`menubar/requirements.txt`** — Python dependency (rumps>=0.4.0)
+- **`menubar/setup.py`** — py2app configuration for building standalone Murmurate.app bundle
+- **`tests/test_menubar.py`** — 40 tests covering all components
+
+### Features
+
+- **Status indicator**: Menu bar shows running (triangle), stopped (square), or error (warning) symbols
+- **Live polling**: Fetches daemon status every 10 seconds via REST API (background thread, non-blocking)
+- **Session counts**: Today's total sessions, completed, and failed counts displayed in menu
+- **Persona list**: Submenu showing all personas with session counts, topic counts, and seed topics
+- **Recent sessions**: Last 5 sessions with status icons (checkmark/cross), timestamps, persona, and plugin
+- **Quick controls**: Stop daemon (with confirmation dialog), open web dashboard in browser
+- **Connection settings**: Configurable API endpoint via dialog or environment variables
+- **Auth support**: Bearer token auth via MURMURATE_API_TOKEN environment variable
+- **Environment configuration**: MURMURATE_API_HOST, MURMURATE_API_PORT, MURMURATE_API_TOKEN, MURMURATE_POLL_INTERVAL
+- **Standalone packaging**: py2app setup.py for building .app bundle (LSUIElement=True, no Dock icon)
+
+### Architecture decisions
+
+- **rumps** chosen for menu bar framework — lightweight, pure-Python, well-suited for status-bar-only apps
+- **urllib** used for API calls instead of requests/aiohttp — avoids adding dependencies beyond rumps
+- **Background threads** for API polling to keep the UI responsive (rumps runs on the main thread)
+- **No IPC with daemon** — connects via the same REST API as the web dashboard
+- **Environment variables** for config rather than a config file — simpler for a companion utility
+
+### How to run
+
+1. Direct: `cd menubar && ./run.sh`
+2. With custom endpoint: `MURMURATE_API_HOST=192.168.1.5 ./run.sh`
+3. As .app bundle: `cd menubar && pip3 install py2app && python3 setup.py py2app` (output in dist/)
+
+### Tests
+
+- 40 new tests in `tests/test_menubar.py`
+- Tests cover: AppConfig, DaemonStatus, PersonaSummary dataclasses, ApiClient with live mock HTTP server, environment variable config, status symbols, MurmurateMenuBar UI state updates
+- Total project tests: 420 Python passing (380 existing + 40 new)
+
+### Current state
+
+- Menu bar app fully functional and tested
+- Not yet production-audited (would need `/full-audit` before declaring production-ready)
