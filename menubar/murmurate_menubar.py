@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 import threading
 import urllib.error
 import urllib.request
@@ -331,7 +329,7 @@ class MurmurateMenuBar(rumps.App):
         if not status.connected:
             symbol = STATUS_SYMBOLS["error"]
             self.title = f"{symbol} Murmurate"
-            self.status_item.title = f"Status: Disconnected"
+            self.status_item.title = "Status: Disconnected"
         elif status.running:
             symbol = STATUS_SYMBOLS["running"]
             self.title = f"{symbol} Murmurate"

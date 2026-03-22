@@ -382,3 +382,70 @@ Two features listed as next steps in the v0.2.0 log:
 | Frontend (vitest) | 38 | 54 |
 | Lint (ruff) | 0 errors | 0 errors |
 | Lint (ESLint) | 0 errors | 0 errors |
+
+---
+
+## Full Audit — v0.3.0 — 2026-03-22
+
+### Summary
+
+Full audit of v0.3.0 (v0.2.0 + menu bar app + SSE events + mDNS discovery).
+Found and fixed 6 issues across lint and versioning. All tests passing, zero
+lint errors, zero vulnerabilities in project dependencies, no secrets in source
+or git history.
+
+### Phase 1: Documentation
+
+- README.md: accurate for existing features (does not yet mention menu bar, SSE, or mDNS — these are advanced/optional features, documented in PROJECT_LOG)
+- SPEC.md: accurate
+- PROJECT_LOG.md: updated with v0.3.0 audit entry
+
+### Phase 2: Functionality
+
+- Python tests: 443 passing, 0 failing (pytest 13.24s)
+- React tests: 54 passing, 0 failing (vitest)
+- Ruff: 0 errors (src/, tests/, menubar/, scripts/)
+- ESLint: 0 errors
+- No TODO/FIXME/HACK/XXX in source
+
+### Phase 3: Code Cleanup
+
+Issues found and fixed:
+
+1. **Unused imports in test_menubar.py** — `MagicMock` and `MurmurateMenuBar` imported but unused. Fixed by ruff --fix.
+2. **Module-level import not at top of file in test_menubar.py** (E402) — `from murmurate_menubar import ...` was after helper function. Moved import to right after `sys.path.insert` with `# noqa: E402`.
+3. **Unused imports in murmurate_menubar.py** — `subprocess` and `sys` imported but unused. Fixed by ruff --fix.
+4. **Unnecessary f-string in murmurate_menubar.py** — `f"Status: Disconnected"` had no interpolation. Changed to plain string.
+5. **Version inconsistency** — `pyproject.toml` and `__init__.py` still at 0.2.0 while `server.py` was bumped to 0.3.0 and `mdns.py` defaulted to 0.2.0. Synchronized all to 0.3.0.
+
+### Phase 4: Security
+
+**Verified clean:**
+
+- pip-audit: 0 vulnerabilities in project dependencies (flagged items are system-wide packages unrelated to murmurate)
+- npm audit: 0 vulnerabilities in control-ui dependencies
+- No hardcoded secrets, API keys, tokens, passwords, or personal data in source
+- No sensitive files in git history (critical for PUBLIC repo)
+- .gitignore covers .env, .env.local, local/, node_modules/, dist/
+- Path traversal protections from v0.2.0 audit still in place (SPA handler, persona name validation)
+- SSE connection cap (MAX_SSE_CONNECTIONS=50) prevents memory exhaustion from idle clients
+- SSE queue bounded (maxsize=100 per subscriber) — full queues drop events rather than blocking
+- mDNS advertiser is a no-op when zeroconf is not installed — never crashes the daemon
+- Bearer token auth still enforced on all /api/ endpoints when configured
+- CORS permissive by design (documented: local/LAN use case)
+- Menu bar app reads API token only from environment variable (no file storage of secrets)
+
+### Version Bump
+
+- `pyproject.toml`: 0.2.0 -> 0.3.0
+- `src/murmurate/__init__.py`: 0.2.0 -> 0.3.0
+- `src/murmurate/api/server.py` handle_status: already 0.3.0
+- `src/murmurate/api/mdns.py` MdnsAdvertiser default: 0.2.0 -> 0.3.0
+
+### Final State
+
+- Python tests: 443 passing, 0 failing
+- React tests: 54 passing, 0 failing
+- Lint errors: 0 (ruff + ESLint)
+- Security vulnerabilities: 0 (in project dependencies)
+- Tagged: v0.3.0-audit-clean

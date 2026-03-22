@@ -75,7 +75,7 @@ class MdnsAdvertiser:
 
     SERVICE_TYPE = "_murmurate._tcp.local."
 
-    def __init__(self, port: int = 7683, version: str = "0.2.0") -> None:
+    def __init__(self, port: int = 7683, version: str = "0.3.0") -> None:
         self.port = port
         self.version = version
         self._zeroconf: "ZeroconfT | None" = None

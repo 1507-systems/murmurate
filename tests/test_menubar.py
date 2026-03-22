@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import threading
 import sys
 
@@ -24,6 +24,14 @@ sys.path.insert(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "menubar",
     ),
+)
+
+from murmurate_menubar import (  # noqa: E402
+    AppConfig,
+    ApiClient,
+    DaemonStatus,
+    PersonaSummary,
+    STATUS_SYMBOLS,
 )
 
 
@@ -352,7 +360,7 @@ class TestEnvConfig:
     """Tests for environment variable configuration loading."""
 
     def test_env_host(self):
-        from murmurate_menubar import AppConfig, MurmurateMenuBar
+        from murmurate_menubar import AppConfig
         with patch.dict(os.environ, {"MURMURATE_API_HOST": "10.0.0.5"}):
             cfg = AppConfig()
             # Simulate what _load_config_from_env does
@@ -464,14 +472,6 @@ def _make_test_app():
     return app
 
 
-# Import the classes needed by the helper at module level (after sys.path setup)
-from murmurate_menubar import (
-    AppConfig,
-    ApiClient,
-    DaemonStatus,
-    PersonaSummary,
-    STATUS_SYMBOLS,
-)
 
 
 class TestMenuBarApp:
