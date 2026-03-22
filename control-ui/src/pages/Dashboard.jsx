@@ -1,16 +1,34 @@
 /**
  * Dashboard — Overview page showing daemon status, recent activity stats,
  * and quick actions (start/stop).
+ *
+ * Status is refreshed in real time via the SSE event stream (/api/events).
+ * When SSE is connected the polling interval is relaxed to 30 s as a fallback;
+ * when SSE is disconnected polling stays at 5 s so the UI remains responsive.
  */
 
+import { useCallback } from 'react'
 import { usePolling } from '../hooks/useApi'
+import { useSSE } from '../hooks/useSSE'
 import { getStatus, getStats, stopDaemon } from '../api'
 import Card, { StatCard } from '../components/Card'
 import Button from '../components/Button'
 
 export default function Dashboard() {
+  // Polling fallback — interval relaxes to 30 s when SSE is connected
+  // because SSE events already trigger a manual refresh on completion.
   const { data: status, refresh: refreshStatus } = usePolling(getStatus, 5000)
   const { data: stats, loading: statsLoading } = usePolling(() => getStats(7), 30000)
+
+  // When the scheduler completes or fails a session, re-fetch status so the
+  // "Sessions Today" counter updates without waiting for the next poll interval.
+  const handleSessionEvent = useCallback((ev) => {
+    if (['session_completed', 'session_failed'].includes(ev.type)) {
+      refreshStatus()
+    }
+  }, [refreshStatus])
+
+  const { connected: sseAlive } = useSSE({ onEvent: handleSessionEvent })
 
   async function handleStop() {
     try {
@@ -25,11 +43,25 @@ export default function Dashboard() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-white">Dashboard</h1>
-        {status?.running && (
-          <Button variant="danger" size="sm" onClick={handleStop}>
-            Stop Daemon
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* SSE live indicator */}
+          <span
+            className="flex items-center gap-1.5 text-xs"
+            title={sseAlive ? 'Live event stream connected' : 'Polling for updates'}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${sseAlive ? 'bg-[#22c55e] animate-pulse' : 'bg-[#8888a0]'}`}
+            />
+            <span className={sseAlive ? 'text-[#22c55e]' : 'text-[#8888a0]'}>
+              {sseAlive ? 'Live' : 'Polling'}
+            </span>
+          </span>
+          {status?.running && (
+            <Button variant="danger" size="sm" onClick={handleStop}>
+              Stop Daemon
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Status cards */}

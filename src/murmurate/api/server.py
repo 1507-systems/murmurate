@@ -8,11 +8,17 @@ the scheduler uses.
 
 The server serves:
   - REST API endpoints under /api/
+  - GET /api/events — Server-Sent Events stream for real-time session updates
   - Static files for the web UI from a bundled directory
 
 Authentication uses a bearer token stored in the config. When the token is
 not set, the API only binds to 127.0.0.1 (local access only). When a token
 is set, it can optionally bind to 0.0.0.0 for remote access.
+
+Real-time updates:
+  The EventBus (api/events.py) holds a set of active SSE connections. Callers
+  (scheduler, CLI) call ``state.event_bus.broadcast(type, data)`` to push
+  events to all connected clients without polling.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from typing import Any
 
 from aiohttp import web
 
+from murmurate.api.events import EventBus
 from murmurate.api.middleware import cors_middleware, auth_middleware
 
 logger = logging.getLogger(__name__)
@@ -36,9 +43,14 @@ def create_app(state: "ApiState") -> web.Application:
 
     The ApiState object is stored on the app dict so handlers can access shared
     daemon state without globals. Middleware handles CORS and optional auth.
+
+    The EventBus is stored on both the app dict and ``state.event_bus`` so
+    external callers (scheduler, CLI) can broadcast events via state alone.
     """
     app = web.Application(middlewares=[cors_middleware, auth_middleware])
     app["state"] = state
+    # Share the event bus on the app dict for handler convenience
+    app["event_bus"] = state.event_bus
 
     # API routes
     app.router.add_get("/api/status", handle_status)
@@ -56,6 +68,8 @@ def create_app(state: "ApiState") -> web.Application:
     app.router.add_post("/api/plugins/{name}/disable", handle_plugin_disable)
     app.router.add_get("/api/config", handle_config_get)
     app.router.add_put("/api/config", handle_config_update)
+    # SSE real-time event stream — clients connect once and receive push updates
+    app.router.add_get("/api/events", state.event_bus.handle_sse)
 
     # Serve static files for the web UI (built React app)
     static_dir = Path(__file__).parent.parent.parent.parent / "control-ui" / "dist"
@@ -98,6 +112,9 @@ class ApiState:
     This is the bridge between the daemon's runtime objects and the API. The
     daemon constructs this with references to its own state, and the API reads
     and writes through it.
+
+    ``event_bus`` is always created here so handlers and external callers
+    (e.g. the scheduler) can broadcast SSE events via ``state.event_bus.broadcast()``.
     """
 
     def __init__(
@@ -115,6 +132,9 @@ class ApiState:
         self.registry = registry
         self.scheduler = scheduler
         self.api_token = api_token
+        # EventBus is always present so callers can call broadcast() safely
+        # even before any client connects (broadcasts are no-ops with 0 subscribers).
+        self.event_bus: EventBus = EventBus()
 
 
 def _json_response(data: Any, status: int = 200) -> web.Response:
@@ -137,7 +157,8 @@ async def handle_status(request: web.Request) -> web.Response:
     result = {
         "running": state.scheduler is not None,
         "config_dir": str(state.config_dir),
-        "version": "0.2.0",
+        "version": "0.3.0",
+        "sse_connections": state.event_bus.connection_count,
     }
 
     # If we have a database, include recent session counts

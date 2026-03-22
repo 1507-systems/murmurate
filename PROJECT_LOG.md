@@ -305,3 +305,80 @@ macOS menu bar app using rumps (Ridiculously Uncomplicated macOS Python Statusba
 
 - Menu bar app fully functional and tested
 - Not yet production-audited (would need `/full-audit` before declaring production-ready)
+
+---
+
+## 2026-03-22 — Real-Time SSE + mDNS LAN Discovery
+
+### What was built
+
+Two features listed as next steps in the v0.2.0 log:
+
+1. **Server-Sent Events (SSE) for real-time session updates** — replaces polling for live session data.
+2. **mDNS/Bonjour advertisement** — the API server advertises itself on the LAN so the control UI can discover Murmurate without manual IP entry.
+
+### Backend changes
+
+#### `src/murmurate/api/events.py` (new)
+- `EventBus` class: holds a set of per-subscriber `asyncio.Queue` instances.
+- `broadcast(event_type, data)`: non-blocking push to all connected queues. Full queues (slow consumers) silently drop the event.
+- `handle_sse(request)`: aiohttp `StreamResponse` handler registered at `GET /api/events`. Sends an initial `connected` event, then streams events as they arrive. Sends `: heartbeat\n\n` comments every 15 seconds to keep proxies alive.
+- `MAX_SSE_CONNECTIONS = 50`: hard cap; returns 503 when exceeded.
+- SSE chosen over WebSocket because session updates are unidirectional (server → client only), SSE has built-in browser reconnect, and it works over plain HTTP with no extra dependencies.
+
+#### `src/murmurate/api/mdns.py` (new)
+- `MdnsAdvertiser` class: wraps the `zeroconf` library (already present on the system as an esphome transitive dep).
+- Advertises service type `_murmurate._tcp.local.` with TXT records for `version`, `api_path`, `ui_path`, and `hostname`.
+- `start()` / `stop()` lifecycle. Both are no-ops (with logged warnings) if `zeroconf` is not installed or if registration fails — never crashes the daemon.
+- `_get_local_ip()`: uses a UDP connect trick to find the primary LAN interface IP.
+- `zeroconf>=0.80` added to `pyproject.toml` as `[project.optional-dependencies.discovery]`.
+
+#### `src/murmurate/api/server.py` (modified)
+- `ApiState` gains `event_bus: EventBus` attribute (always constructed, even before any client connects).
+- `create_app()` registers `GET /api/events` using `state.event_bus.handle_sse`.
+- `GET /api/status` now includes `sse_connections` count.
+- Version string bumped to `0.3.0`.
+
+#### `src/murmurate/scheduler/scheduler.py` (modified)
+- Constructor gains optional `event_bus: EventBus | None = None` parameter.
+- After `log_session_start`: broadcasts `session_started` event.
+- After `log_session_complete`: broadcasts `session_completed` event with query/browse counts and new subtopics.
+- On exception: broadcasts `session_failed` event with error string.
+- Import uses `TYPE_CHECKING` guard so there is zero runtime cost when the API is not loaded.
+
+#### `src/murmurate/cli.py` (modified)
+- `_run_with_api()`: creates `ApiState` first so the `event_bus` exists before the `Scheduler` is built; passes `event_bus` to `Scheduler` constructor; starts `MdnsAdvertiser` after the HTTP server is listening; stops it in the `finally` block.
+- `_run_api_only()`: starts and stops `MdnsAdvertiser` for standalone API-only mode.
+
+### Frontend changes
+
+#### `control-ui/src/hooks/useSSE.js` (new)
+- `useSSE({ onEvent, enabled })`: opens an `EventSource` to `/api/events`, tracks `connected` state and `lastEvent`. Calls `onEvent` on every JSON event. Auto-reconnects (browser native). No-op when `EventSource` is unavailable.
+- `useSessionEvents(maxEvents)`: wraps `useSSE` to accumulate `session_started` / `session_completed` / `session_failed` events into a bounded list (newest first). Exposes `clearEvents()`.
+
+#### `control-ui/src/pages/Dashboard.jsx` (modified)
+- On `session_completed` or `session_failed` SSE events calls `refreshStatus()` so the "Sessions Today" counter updates immediately without waiting for the next poll.
+- Shows a pulsing green `Live` / grey `Polling` indicator next to the page title.
+
+#### `control-ui/src/pages/History.jsx` (modified)
+- Live events appear in a "Live Events" card above the history table instantly when the scheduler fires.
+- Polling interval relaxed to 30 s (was 10 s) because SSE covers real-time needs.
+- Shows SSE `Live` / `Polling` indicator in the page header.
+- `clearEvents` button dismisses the live panel.
+
+### Tests added
+
+| File | New tests |
+|------|-----------|
+| `tests/test_events.py` | 18 — EventBus unit tests + SSE HTTP endpoint tests |
+| `tests/test_mdns.py` | 9 — MdnsAdvertiser lifecycle + _get_local_ip fallback |
+| `control-ui/src/__tests__/useSSE.test.js` | 16 — useSSE and useSessionEvents hooks |
+
+### Test results
+
+| Suite | Before | After |
+|-------|--------|-------|
+| Python (pytest) | 420 | 443 |
+| Frontend (vitest) | 38 | 54 |
+| Lint (ruff) | 0 errors | 0 errors |
+| Lint (ESLint) | 0 errors | 0 errors |

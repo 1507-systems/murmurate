@@ -30,6 +30,11 @@ from murmurate.scheduler.timing import TimingModel
 from murmurate.scheduler.rate_limiter import RateLimiter
 from murmurate.database import StateDB
 
+# TYPE_CHECKING guard keeps the import cost to zero when running without the API
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from murmurate.api.events import EventBus
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +63,7 @@ class Scheduler:
         timing: TimingModel,
         rate_limiter: RateLimiter,
         persona_engine: PersonaEngine | None = None,
+        event_bus: "EventBus | None" = None,
     ) -> None:
         self._config = config
         self._personas = personas
@@ -74,6 +80,8 @@ class Scheduler:
         self._stop_requested = False
         # Used in SessionResult.machine_id to identify which host ran the session
         self._machine_id = socket.gethostname()
+        # Optional — if set, session lifecycle events are broadcast over SSE
+        self._event_bus = event_bus
 
     # ------------------------------------------------------------------
     # Public API
@@ -182,6 +190,15 @@ class Scheduler:
                     self._machine_id,
                 )
 
+                # Notify SSE clients that a new session has begun
+                if self._event_bus:
+                    self._event_bus.broadcast("session_started", {
+                        "session_id": session.session_id,
+                        "persona_name": persona.name,
+                        "plugin_name": plugin.name,
+                        "transport_type": transport_type.value,
+                    })
+
                 # Record rate-limit token for each domain before we go out
                 for domain in plugin.domains:
                     await self._rate_limiter.record(domain)
@@ -253,10 +270,32 @@ class Scheduler:
                     len(result.new_subtopics),
                 )
 
+                # Notify SSE clients that the session completed successfully
+                if self._event_bus:
+                    self._event_bus.broadcast("session_completed", {
+                        "session_id": result.session_id,
+                        "persona_name": result.persona_name,
+                        "plugin_name": result.plugin_name,
+                        "transport_type": result.transport_type.value,
+                        "queries_executed": result.queries_executed,
+                        "results_browsed": result.results_browsed,
+                        "new_subtopics": result.new_subtopics,
+                        "completed_at": result.completed_at,
+                    })
+
             except Exception as exc:
                 logger.error("Session %s failed: %s", session.session_id[:8], exc)
                 await self._db.log_session_failed(session.session_id, str(exc))
                 self._registry.record_failure(plugin.name)
+
+                # Notify SSE clients of the failure
+                if self._event_bus:
+                    self._event_bus.broadcast("session_failed", {
+                        "session_id": session.session_id,
+                        "persona_name": persona.name,
+                        "plugin_name": plugin.name,
+                        "error": str(exc),
+                    })
 
             # Count this as an attempt regardless of success/failure so that
             # max_sessions acts as a hard ceiling on total execution attempts.

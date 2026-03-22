@@ -120,9 +120,14 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
     Both the scheduler and the API server share the same event loop. The API
     server gets references to the live scheduler, database, and plugin registry
     so it can serve real-time data without IPC.
+
+    mDNS is advertised when the server starts so other devices on the LAN can
+    discover this Murmurate instance without manual IP configuration.
     """
+    import logging as _logging
     from aiohttp import web
     from murmurate.api.server import ApiState, create_app
+    from murmurate.api.mdns import MdnsAdvertiser
     from murmurate.database import StateDB
     from murmurate.persona.engine import PersonaEngine
     from murmurate.persona.storage import load_all_personas
@@ -148,6 +153,18 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
     rate_limiter = RateLimiter(db)
     engine = PersonaEngine()
 
+    # Build the API state first so the event bus exists before the scheduler
+    api_state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=db,
+        registry=registry,
+        scheduler=None,   # filled in below after scheduler is created
+        api_token=token,
+    )
+
+    # Wire the event bus into the scheduler so session lifecycle events are
+    # pushed to SSE subscribers in real time
     scheduler = Scheduler(
         config=config,
         personas=personas,
@@ -158,17 +175,10 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
         timing=timing,
         rate_limiter=rate_limiter,
         persona_engine=engine,
+        event_bus=api_state.event_bus,
     )
+    api_state.scheduler = scheduler
 
-    # Build the API server with shared state
-    api_state = ApiState(
-        config=config,
-        config_dir=config_dir,
-        db=db,
-        registry=registry,
-        scheduler=scheduler,
-        api_token=token,
-    )
     app = create_app(api_state)
 
     # Start the API server as a background task
@@ -177,8 +187,11 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
     site = web.TCPSite(runner, host, port)
     await site.start()
 
-    import logging
-    logging.getLogger(__name__).info("API server listening on http://%s:%d", host, port)
+    _logging.getLogger(__name__).info("API server listening on http://%s:%d", host, port)
+
+    # Advertise the service on the LAN via mDNS/Bonjour
+    mdns = MdnsAdvertiser(port=port, version="0.3.0")
+    mdns.start()
 
     try:
         if personas:
@@ -190,6 +203,7 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
             while True:
                 await asyncio.sleep(60)
     finally:
+        mdns.stop()
         await runner.cleanup()
         await http.stop()
         await db.close()
@@ -272,9 +286,12 @@ async def _run_api_only(config, config_dir: Path, host: str, port: int, token: s
 
     Useful for managing personas, viewing history, and editing config
     when you don't want to actually generate traffic.
+
+    mDNS is advertised so the LAN control UI can discover this instance.
     """
     from aiohttp import web
     from murmurate.api.server import ApiState, create_app
+    from murmurate.api.mdns import MdnsAdvertiser
     from murmurate.database import StateDB
     from murmurate.plugins.registry import PluginRegistry
 
@@ -303,12 +320,16 @@ async def _run_api_only(config, config_dir: Path, host: str, port: int, token: s
     click.echo(f"Murmurate Control UI API running on http://{host}:{port}")
     click.echo("Press Ctrl+C to stop.")
 
+    mdns = MdnsAdvertiser(port=port, version="0.3.0")
+    mdns.start()
+
     try:
         while True:
             await asyncio.sleep(60)
     except asyncio.CancelledError:
         pass
     finally:
+        mdns.stop()
         await runner.cleanup()
         await db.close()
 

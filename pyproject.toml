@@ -21,6 +21,10 @@ dependencies = [
 browser = [
     "playwright>=1.40",
 ]
+# LAN discovery via mDNS/Bonjour — optional, no-op if not installed
+discovery = [
+    "zeroconf>=0.80",
+]
 # Development tools: testing, coverage, async test support, HTTP mocking
 dev = [
     "pytest>=8.0",
