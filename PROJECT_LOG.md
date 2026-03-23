@@ -449,3 +449,27 @@ Issues found and fixed:
 - Lint errors: 0 (ruff + ESLint)
 - Security vulnerabilities: 0 (in project dependencies)
 - Tagged: v0.3.0-audit-clean
+
+---
+
+## 2026-03-22 — Branch Protection Enabled
+
+### What was done
+
+Enabled GitHub branch protection on the `main` branch of the public 1507-systems/murmurate repository.
+
+### Configuration
+
+- **Require status checks**: Enabled (strict mode)
+- **Require PRs**: Enabled (0 required approvals for now, can be increased later)
+- **Enforce on admins**: Disabled
+- **Restrictions**: None (all team members can push via PR)
+
+The repository already has CI configured (.github/workflows), so branch protection integrates seamlessly with the existing test pipeline.
+
+### Verification
+
+Verified via `gh api repos/1507-systems/murmurate/branches/main/protection`:
+- Required status checks: strict=true, contexts=[] (checks will auto-populate when CI runs)
+- Required pull request reviews: required_approving_review_count=0
+- All other protections: default (no force-push, no deletions, linear history disabled)
