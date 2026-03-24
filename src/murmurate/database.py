@@ -62,7 +62,7 @@ class StateDB:
         momentarily locked.  Rather than propagating that transient error we
         wait briefly and retry, up to _MAX_RETRIES times.
         """
-        assert self._conn is not None, "StateDB not initialised — call initialize() first"
+        assert self._conn is not None, "StateDB not initialised — call initialize() first"  # nosec B101 — developer guard only; this assert catches incorrect usage during development (calling execute before initialize). It is not a production input-validation gate.
 
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):

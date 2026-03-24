@@ -111,7 +111,7 @@ class ApiClient:
 
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:  # nosec B310 — URL is always the configured local/LAN Murmurate daemon endpoint (e.g. http://127.0.0.1:<port>), never constructed from user input. Opening a known internal API URL is intentional and safe.
             return json.loads(resp.read().decode())
 
     def get_status(self) -> DaemonStatus:
