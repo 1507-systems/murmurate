@@ -1,3 +1,4 @@
+<!-- summary: Autonomous AI agent orchestration daemon with plugin architecture, persona system, multi-transport search, and REST API. -->
 # Murmurate — Project Log
 
 ## 2026-03-13 — v0.1.0 Initial Implementation
