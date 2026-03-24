@@ -127,7 +127,7 @@ ok "Murmurate installed"
 # Optional browser support
 if confirm "Install browser automation support (Playwright)? This downloads ~150 MB of browser binaries"; then
     info "Installing Playwright support…"
-    pip install --quiet -e "$REPO_DIR[browser]"
+    pip install --quiet -e "${REPO_DIR}[browser]"
     "$VENV_DIR/bin/playwright" install chromium
     ok "Browser support installed"
 else
@@ -152,15 +152,20 @@ ok "Shell wrapper created"
 # Check if ~/.local/bin is already in PATH
 if [[ ":$PATH:" != *":$WRAPPER_DIR:"* ]]; then
     PROFILE="$HOME/.zprofile"
+    # SC2016: intentional — we want literal $HOME/$PATH in the written profile line,
+    # not expanded at install time, so the profile works for any user.
+    # shellcheck disable=SC2016
     PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
     if [[ -f "$PROFILE" ]] && grep -qF '.local/bin' "$PROFILE" 2>/dev/null; then
         info "PATH entry already in $PROFILE (not currently active — restart terminal)"
     else
         info "Adding ~/.local/bin to PATH in $PROFILE…"
-        echo "" >> "$PROFILE"
-        echo "# Added by Murmurate installer" >> "$PROFILE"
-        echo "$PATH_LINE" >> "$PROFILE"
+        {
+            echo ""
+            echo "# Added by Murmurate installer"
+            echo "$PATH_LINE"
+        } >> "$PROFILE"
         ok "PATH updated in $PROFILE"
     fi
     # Also export for the rest of this script
@@ -250,10 +255,12 @@ for name in "${PERSONA_NAMES[@]}"; do
         seed_args+=(--seeds "$s")
     done
 
-    "$VENV_DIR/bin/murmurate" personas add "$name" "${seed_args[@]}" \
-        --config-dir "$CONFIG_DIR" 2>/dev/null \
-        && ok "Created persona '$name' with seeds: ${seeds[*]}" \
-        || warn "Could not create persona '$name' (non-fatal)"
+    if "$VENV_DIR/bin/murmurate" personas add "$name" "${seed_args[@]}" \
+            --config-dir "$CONFIG_DIR" 2>/dev/null; then
+        ok "Created persona '$name' with seeds: ${seeds[*]}"
+    else
+        warn "Could not create persona '$name' (non-fatal)"
+    fi
 done
 
 # ---------------------------------------------------------------------------
@@ -262,9 +269,11 @@ done
 echo ""
 if confirm "Install launchd daemon to run Murmurate in the background on login?"; then
     info "Installing launchd daemon…"
-    "$VENV_DIR/bin/murmurate" install-daemon --config-dir "$CONFIG_DIR" 2>/dev/null \
-        && ok "Daemon plist installed" \
-        || warn "Could not install daemon (non-fatal — you can run 'murmurate install-daemon' later)"
+    if "$VENV_DIR/bin/murmurate" install-daemon --config-dir "$CONFIG_DIR" 2>/dev/null; then
+        ok "Daemon plist installed"
+    else
+        warn "Could not install daemon (non-fatal — you can run 'murmurate install-daemon' later)"
+    fi
 
     PLIST_PATH="$HOME/Library/LaunchAgents/com.murmurate.daemon.plist"
     if [[ -f "$PLIST_PATH" ]]; then
