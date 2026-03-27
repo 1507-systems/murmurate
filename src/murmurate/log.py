@@ -53,23 +53,21 @@ class _JsonFormatter(logging.Formatter):
 
 
 def setup_logging(
-    log_file: Path,
+    log_file: "Path | None" = None,
     level: str = "INFO",
     json_format: bool = True,
 ) -> None:
-    """Configure the root logger to write to *log_file*.
+    """Configure the root logger.
 
     Args:
         log_file: Destination file.  Parent directories are created if
-            they do not already exist.
+            they do not already exist.  When ``None``, logs are sent to
+            stderr instead of a file.
         level: Minimum severity to record (DEBUG / INFO / WARNING /
             ERROR / CRITICAL).  Case-insensitive.
         json_format: When ``True`` (default) each line is a JSON object.
             When ``False`` a human-readable format is used instead.
     """
-    log_file = Path(log_file)
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
     root = logging.getLogger()
@@ -79,17 +77,23 @@ def setup_logging(
         root.removeHandler(handler)
         handler.close()
 
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(numeric_level)
+    if log_file is not None:
+        log_file = Path(log_file)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(log_file, encoding="utf-8")
+    else:
+        handler = logging.StreamHandler()
+
+    handler.setLevel(numeric_level)
 
     if json_format:
-        file_handler.setFormatter(_JsonFormatter())
+        handler.setFormatter(_JsonFormatter())
     else:
         fmt = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"
-        file_handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%dT%H:%M:%S"))
+        handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%dT%H:%M:%S"))
 
     root.setLevel(numeric_level)
-    root.addHandler(file_handler)
+    root.addHandler(handler)
 
 
 def get_logger(name: str) -> logging.Logger:
