@@ -474,3 +474,27 @@ Verified via `gh api repos/1507-systems/murmurate/branches/main/protection`:
 - Required status checks: strict=true, contexts=[] (checks will auto-populate when CI runs)
 - Required pull request reviews: required_approving_review_count=0
 - All other protections: default (no force-push, no deletions, linear history disabled)
+
+---
+
+## 2026-03-27 — v0.4.0 Re-Audit (post log_file fix)
+
+### Trigger
+11 commits merged after v0.3.0-audit-clean tag, including the `log_file` None fix (#6), CI peer dependency fix (#5), bandit warning suppressions (#3, #4), and security lint fixes (#2).
+
+### Results
+
+| Check | Result |
+|-------|--------|
+| Python tests (`pytest tests/ -x -q`) | 443 passed |
+| React tests (`vitest run`, control-ui) | 54 passed |
+| bandit (`-r src/`) | 0 Medium/High; 39 Low (B110 try-except-pass, intentional) |
+| shellcheck (menubar/run.sh, scripts/install-macos.sh) | Clean |
+| npm audit (`--omit=dev`, control-ui) | 0 vulnerabilities |
+| Secrets scan | Clean (only test fixture dummies) |
+| Private data scan (PUBLIC repo) | Clean — no real IPs, emails, keys |
+| TODO/FIXME/HACK/XXX | None in source |
+
+### Outcome
+- Tagged `v0.4.0-audit-clean` on main
+- Total test count: 497 (443 Python + 54 React)
