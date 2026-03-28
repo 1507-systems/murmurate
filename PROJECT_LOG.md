@@ -1,6 +1,27 @@
 <!-- summary: Autonomous AI agent orchestration daemon with plugin architecture, persona system, multi-transport search, and REST API. -->
 # Murmurate — Project Log
 
+## 2026-03-28 — CI Fix: macOS-only Tests + Linux Trash Directory
+
+### Problem
+CI was broken on main with two separate failures:
+1. `test_menubar.py` imported `rumps` (and `murmurate_menubar` which also imports `rumps`) at module level — `rumps` is macOS-only and not installable on the Ubuntu CI runner, causing an `ImportError` that aborted collection.
+2. `test_persona_delete` failed because `handle_persona_delete` in the API server called `shutil.move` to `~/.Trash` without creating the directory first — `~/.Trash` does not exist by default on Linux.
+
+### Changes
+
+**PR #10** (`fix/ci-skip-macos-tests`) — `tests/test_menubar.py`:
+- Added `pytestmark = pytest.mark.skipif(sys.platform != "darwin", ...)` to skip all tests in the file on Linux
+- Guarded `import rumps` and `from murmurate_menubar import ...` with `if sys.platform == "darwin":` blocks so the module can be collected on Linux without an import error
+- macOS: all 443 tests still pass; Linux: 40 menubar tests skipped, remaining 403 pass
+
+**PR #11** (`fix/trash-dir-linux`) — `src/murmurate/api/server.py`:
+- Added `trash.mkdir(parents=True, exist_ok=True)` in `handle_persona_delete` before `shutil.move` so the `~/.Trash` directory is created on Linux if it doesn't exist
+
+### Status
+- Both PRs merged to main
+- CI fully green: 403 passed, 40 skipped (macOS-only menubar tests)
+
 ## 2026-03-28 — NPM Audit: Brace-Expansion Vulnerability Fix
 
 ### What was fixed
