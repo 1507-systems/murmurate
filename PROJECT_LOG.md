@@ -1,6 +1,24 @@
 <!-- summary: Autonomous AI agent orchestration daemon with plugin architecture, persona system, multi-transport search, and REST API. -->
 # Murmurate — Project Log
 
+## 2026-03-28 — NPM Audit: Brace-Expansion Vulnerability Fix
+
+### What was fixed
+
+Control-UI brace-expansion vulnerability (npm audit).
+
+### Changes
+
+- Updated brace-expansion from 1.1.12 to 1.1.13 in control-ui/package-lock.json via `npm audit fix`
+- All 54 tests pass (4 test files)
+- Zero vulnerabilities remaining
+
+### Status
+
+- PR #8 merged to main
+- Control-UI CI passes ✓
+- Python tests pre-existing failures (unrelated to this change)
+
 ## 2026-03-13 — v0.1.0 Initial Implementation
 
 ### What was built
