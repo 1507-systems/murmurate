@@ -350,9 +350,12 @@ async def handle_persona_delete(request: web.Request) -> web.Response:
     if not persona_file.exists():
         return _json_response({"error": f"Persona '{name}' not found"}, status=404)
 
-    # Move to trash instead of deleting (per project conventions)
+    # Move to trash instead of deleting (per project conventions).
+    # Create the Trash directory if it doesn't exist — on Linux ~/.Trash
+    # is not created automatically (macOS always has it).
     import shutil
     trash = Path.home() / ".Trash"
+    trash.mkdir(parents=True, exist_ok=True)
     shutil.move(str(persona_file), str(trash / persona_file.name))
 
     return _json_response({"message": f"Persona '{name}' deleted"})
