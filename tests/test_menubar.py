@@ -15,9 +15,20 @@ import threading
 import sys
 
 import pytest
-import rumps
 
-# Add menubar directory to path so we can import the module
+# Skip this entire module on non-macOS platforms — rumps is a macOS-only
+# package (wraps AppKit) and cannot be installed on Linux CI runners.
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="macOS-only (requires rumps / AppKit)",
+)
+
+if sys.platform == "darwin":
+    import rumps
+
+# Add menubar directory to path so we can import the module.
+# The import itself is guarded because murmurate_menubar also imports rumps at
+# module level and will fail to collect on non-macOS CI runners.
 sys.path.insert(
     0,
     os.path.join(
@@ -26,13 +37,14 @@ sys.path.insert(
     ),
 )
 
-from murmurate_menubar import (  # noqa: E402
-    AppConfig,
-    ApiClient,
-    DaemonStatus,
-    PersonaSummary,
-    STATUS_SYMBOLS,
-)
+if sys.platform == "darwin":
+    from murmurate_menubar import (  # noqa: E402
+        AppConfig,
+        ApiClient,
+        DaemonStatus,
+        PersonaSummary,
+        STATUS_SYMBOLS,
+    )
 
 
 # ---------------------------------------------------------------------------
