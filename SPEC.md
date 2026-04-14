@@ -654,7 +654,7 @@ CREATE INDEX idx_rate_limits_domain_time ON rate_limits (domain, request_time);
 **Log format:** Structured JSON lines (one JSON object per line) for machine parsing, with a human-readable `--log-format text` option.
 
 ```json
-{"ts": "2026-03-12T14:30:00Z", "level": "INFO", "event": "session_complete", "session_id": "abc-123", "persona": "woodworker", "plugin": "google", "transport": "http", "queries": 5, "duration_s": 127.3, "machine_id": "roguenode"}
+{"ts": "2026-03-12T14:30:00Z", "level": "INFO", "event": "session_complete", "session_id": "abc-123", "persona": "woodworker", "plugin": "google", "transport": "http", "queries": 5, "duration_s": 127.3, "machine_id": "wiles"}
 ```
 
 **Log levels:** DEBUG, INFO, WARNING, ERROR
@@ -668,7 +668,7 @@ CREATE INDEX idx_rate_limits_domain_time ON rate_limits (domain, request_time);
 **`murmurate status` output:**
 ```
 Murmurate v0.1.0 — running (PID 12345, since 2026-03-12 07:00)
-Machine: roguenode
+Machine: wiles
 Config: ~/Library/Mobile Documents/com~apple~CloudDocs/murmurate/
 
 Sessions today: 34 (18 HTTP, 16 browser)

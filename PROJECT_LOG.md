@@ -537,3 +537,52 @@ Verified via `gh api repos/1507-systems/murmurate/branches/main/protection`:
 ### Outcome
 - Tagged `v0.4.0-audit-clean` on main
 - Total test count: 497 (443 Python + 54 React)
+
+---
+
+## Full Audit — 2026-04-13
+
+### Summary
+
+Routine full audit. Found and fixed 1 npm vulnerability (Vite path traversal / WebSocket
+file read — dev dependency only). Updated SPEC.md example machine IDs. Added `.claude/`
+to `.gitignore`. All tests passing, zero lint errors, zero security vulnerabilities.
+
+### Phase 1: Documentation
+
+- PROJECT_LOG.md: accurate, test counts match reality (443 Python, 54 React)
+- SPEC.md: updated example `machine_id` from "roguenode" to "wiles" (cosmetic)
+- Version strings consistent at 0.3.0 across pyproject.toml, `__init__.py`, server.py, mdns.py
+
+### Phase 2: Functionality
+
+| Check | Result |
+|-------|--------|
+| Python tests (`pytest tests/ -x -q`) | 443 passed |
+| React tests (`vitest run`, control-ui) | 54 passed |
+| Ruff lint (`src/ tests/ menubar/ scripts/`) | 0 errors |
+| ESLint (`control-ui/src/`) | 0 errors |
+
+### Phase 3: Code Cleanup
+
+- No TODO/FIXME/HACK/XXX in source
+- No unused imports or dead code
+- Added `.claude/` to `.gitignore` (Claude Code working directory, not project code)
+
+### Phase 4: Security
+
+| Check | Result |
+|-------|--------|
+| bandit (`-r src/`) | 0 Medium/High; 39 Low (B311 random + B110 try-except-pass, all intentional) |
+| shellcheck (`menubar/run.sh`, `scripts/install-macos.sh`) | Clean |
+| npm audit (`control-ui/`) | **1 high fixed** — Vite 8.0.0-8.0.4 path traversal/WebSocket vulnerabilities (GHSA-4w7w-66w2-5vf9, GHSA-v2wj-q39q-566r, GHSA-p9ff-h696-f583). Fixed via `npm audit fix`. |
+| Secrets scan | Clean — no hardcoded secrets, API keys, tokens, or personal data |
+| macOS Keychain usage | None found |
+| Private data (PUBLIC repo) | Clean — no real IPs, emails, keys |
+
+### Final State
+
+- Python tests: 443 passing, 0 failing
+- React tests: 54 passing, 0 failing
+- Lint errors: 0 (ruff + ESLint)
+- Security vulnerabilities: 0
