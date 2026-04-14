@@ -28,6 +28,7 @@ local/
 
 # Internal tooling artifacts
 docs/superpowers/
+.claude/
 
 # Environment
 .env
