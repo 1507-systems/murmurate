@@ -161,3 +161,66 @@ def test_uninstall_daemon_help(runner):
     """uninstall-daemon --help should describe service removal."""
     result = runner.invoke(cli, ["uninstall-daemon", "--help"])
     assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# Bind-address / token safety guard (security: refuse unauthenticated non-loopback bind)
+# ---------------------------------------------------------------------------
+
+from murmurate.cli import _is_loopback_host, _require_token_for_nonloopback
+import click as _click
+
+
+@pytest.mark.parametrize(
+    "host,expected",
+    [
+        ("127.0.0.1", True),
+        ("::1", True),
+        ("localhost", True),
+        ("LocalHost", True),
+        ("", True),
+        (None, True),
+        ("0.0.0.0", False),
+        ("::", False),
+        ("192.168.1.50", False),
+        ("100.64.0.1", False),
+    ],
+)
+def test_is_loopback_host(host, expected):
+    assert _is_loopback_host(host) is expected
+
+
+def test_guard_allows_loopback_without_token():
+    # Loopback bind with no token is the safe default — must not raise.
+    _require_token_for_nonloopback("127.0.0.1", None)
+    _require_token_for_nonloopback("localhost", "")
+    _require_token_for_nonloopback(None, None)
+
+
+def test_guard_allows_nonloopback_with_token():
+    # Non-loopback bind is permitted only when a token is supplied.
+    _require_token_for_nonloopback("0.0.0.0", "s3cret-token")
+    _require_token_for_nonloopback("192.168.1.50", "s3cret-token")
+
+
+def test_guard_rejects_nonloopback_without_token():
+    with pytest.raises(_click.ClickException):
+        _require_token_for_nonloopback("0.0.0.0", None)
+    with pytest.raises(_click.ClickException):
+        _require_token_for_nonloopback("0.0.0.0", "")
+    with pytest.raises(_click.ClickException):
+        _require_token_for_nonloopback("192.168.1.50", None)
+
+
+def test_api_command_refuses_unauthenticated_wildcard_bind(runner):
+    """`murmurate api --host 0.0.0.0` with no token must fail closed before binding."""
+    result = runner.invoke(cli, ["api", "--host", "0.0.0.0"])
+    assert result.exit_code != 0
+    assert "without an auth token" in result.output
+
+
+def test_start_api_refuses_unauthenticated_wildcard_bind(runner):
+    """`murmurate start --api --api-host 0.0.0.0` with no token must fail closed."""
+    result = runner.invoke(cli, ["start", "--api", "--api-host", "0.0.0.0"])
+    assert result.exit_code != 0
+    assert "without an auth token" in result.output

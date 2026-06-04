@@ -34,6 +34,47 @@ import click
 
 
 # ---------------------------------------------------------------------------
+# Bind-address safety guard
+# ---------------------------------------------------------------------------
+
+# Hostnames that keep the API reachable only from the local machine. Binding to
+# any of these is always safe (no token required), because the listener is not
+# exposed to the LAN/internet.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", ""})
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    """Return True if `host` binds the listener to loopback only.
+
+    A None/empty host defaults to loopback. Anything that is not an explicit
+    loopback literal (including the wildcard binds 0.0.0.0 and ::) is treated as
+    non-loopback and therefore exposed.
+    """
+    return (host or "").strip().lower() in _LOOPBACK_HOSTS
+
+
+def _require_token_for_nonloopback(host: str | None, token: str | None) -> None:
+    """Fail closed before binding the API to a non-loopback address with no auth.
+
+    The auth middleware short-circuits to "allow" when no token is configured
+    (so the local control UI works out of the box). That is only safe on a
+    loopback bind. Binding 0.0.0.0 / a LAN IP with no token exposes an
+    unauthenticated control API (stop the daemon, rewrite config, read full
+    browsing history) to anyone on the network — and mDNS actively advertises
+    it. Refuse to start in that configuration.
+
+    This is the single source of truth for the bind/token policy; both the
+    `start --api` and standalone `api` commands call it.
+    """
+    if not _is_loopback_host(host) and not token:
+        raise click.ClickException(
+            f"Refusing to bind the API to non-loopback address {host!r} without "
+            "an auth token. Pass --api-token (a Bearer token) to enable remote "
+            "access, or bind to 127.0.0.1 / localhost for local-only use."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Root group
 # ---------------------------------------------------------------------------
 
@@ -101,6 +142,11 @@ def start(config_dir, log_format, api, api_port, api_host, api_token):
         click.echo("Daemon already running. Use 'murmurate stop' first.")
         sys.exit(1)
 
+    # Fail closed before doing any work: never expose the API on a non-loopback
+    # address without an auth token.
+    if api:
+        _require_token_for_nonloopback(api_host, api_token)
+
     config = load_config(config_path)
     setup_logging(log_file=None, level="INFO", json_format=(log_format == "json"))
 
@@ -124,6 +170,9 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
     mDNS is advertised when the server starts so other devices on the LAN can
     discover this Murmurate instance without manual IP configuration.
     """
+    # Backstop the bind/token policy even for direct (non-CLI) callers.
+    _require_token_for_nonloopback(host, token)
+
     import logging as _logging
     from aiohttp import web
     from murmurate.api.server import ApiState, create_app
@@ -276,6 +325,10 @@ def api_server(config_dir, port, host, api_token):
     """Run the Control UI API server (without the scheduler)."""
     from murmurate.config import load_config, resolve_config_dir
 
+    # Fail closed before binding: never expose the API on a non-loopback address
+    # without an auth token.
+    _require_token_for_nonloopback(host, api_token)
+
     config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
     config = load_config(config_path)
     asyncio.run(_run_api_only(config, config_path, host, port, api_token))
@@ -289,6 +342,9 @@ async def _run_api_only(config, config_dir: Path, host: str, port: int, token: s
 
     mDNS is advertised so the LAN control UI can discover this instance.
     """
+    # Backstop the bind/token policy even for direct (non-CLI) callers.
+    _require_token_for_nonloopback(host, token)
+
     from aiohttp import web
     from murmurate.api.server import ApiState, create_app
     from murmurate.api.mdns import MdnsAdvertiser
