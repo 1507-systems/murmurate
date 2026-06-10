@@ -6,9 +6,14 @@ The run command is not tested here since it requires a full async stack with
 database, transports, and plugins — that belongs in integration tests.
 """
 
+import click as _click
 import pytest
 from click.testing import CliRunner
-from murmurate.cli import cli
+from murmurate.cli import (
+    _is_loopback_host,
+    _require_token_for_nonloopback,
+    cli,
+)
 
 
 @pytest.fixture
@@ -166,9 +171,6 @@ def test_uninstall_daemon_help(runner):
 # ---------------------------------------------------------------------------
 # Bind-address / token safety guard (security: refuse unauthenticated non-loopback bind)
 # ---------------------------------------------------------------------------
-
-from murmurate.cli import _is_loopback_host, _require_token_for_nonloopback
-import click as _click
 
 
 @pytest.mark.parametrize(
