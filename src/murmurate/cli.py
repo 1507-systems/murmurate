@@ -210,6 +210,7 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
         registry=registry,
         scheduler=None,   # filled in below after scheduler is created
         api_token=token,
+        bind_host=host,
     )
 
     # Wire the event bus into the scheduler so session lifecycle events are
@@ -365,6 +366,7 @@ async def _run_api_only(config, config_dir: Path, host: str, port: int, token: s
         registry=registry,
         scheduler=None,
         api_token=token,
+        bind_host=host,
     )
     app = create_app(api_state)
 

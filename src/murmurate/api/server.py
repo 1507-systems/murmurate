@@ -11,9 +11,15 @@ The server serves:
   - GET /api/events — Server-Sent Events stream for real-time session updates
   - Static files for the web UI from a bundled directory
 
-Authentication uses a bearer token stored in the config. When the token is
-not set, the API only binds to 127.0.0.1 (local access only). When a token
-is set, it can optionally bind to 0.0.0.0 for remote access.
+Security model:
+  - host_allowlist_middleware (runs first) rejects any request whose Host
+    header is not a loopback name or the configured bind host. This blocks
+    DNS-rebinding attacks regardless of token configuration.
+  - The CLI refuses to bind a non-loopback address without an auth token
+    (cli.py _require_token_for_nonloopback), so the no-token default is only
+    reachable on loopback.
+  - auth_middleware enforces a bearer token on /api/ requests when one is set.
+    With a token configured the server may bind 0.0.0.0 for remote access.
 
 Real-time updates:
   The EventBus (api/events.py) holds a set of active SSE connections. Callers
@@ -33,7 +39,11 @@ from typing import Any
 from aiohttp import web
 
 from murmurate.api.events import EventBus
-from murmurate.api.middleware import cors_middleware, auth_middleware
+from murmurate.api.middleware import (
+    host_allowlist_middleware,
+    cors_middleware,
+    auth_middleware,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +52,16 @@ def create_app(state: "ApiState") -> web.Application:
     """Build and return the aiohttp Application with all routes registered.
 
     The ApiState object is stored on the app dict so handlers can access shared
-    daemon state without globals. Middleware handles CORS and optional auth.
+    daemon state without globals. Middleware enforces the Host allowlist (DNS-
+    rebinding defense), then CORS, then optional bearer-token auth — in that
+    order, so the Host check runs before any handler or auth logic.
 
     The EventBus is stored on both the app dict and ``state.event_bus`` so
     external callers (scheduler, CLI) can broadcast events via state alone.
     """
-    app = web.Application(middlewares=[cors_middleware, auth_middleware])
+    app = web.Application(
+        middlewares=[host_allowlist_middleware, cors_middleware, auth_middleware]
+    )
     app["state"] = state
     # Share the event bus on the app dict for handler convenience
     app["event_bus"] = state.event_bus
@@ -125,6 +139,7 @@ class ApiState:
         registry=None,
         scheduler=None,
         api_token: str | None = None,
+        bind_host: str | None = None,
     ):
         self.config = config
         self.config_dir = config_dir
@@ -132,6 +147,11 @@ class ApiState:
         self.registry = registry
         self.scheduler = scheduler
         self.api_token = api_token
+        # The address the server is told to bind to. Added to the Host-header
+        # allowlist (host_allowlist_middleware) so a legitimate non-loopback
+        # bind is reachable by its own host while DNS rebinding is still
+        # rejected. Loopback names are always allowed regardless of this value.
+        self.bind_host = bind_host
         # EventBus is always present so callers can call broadcast() safely
         # even before any client connects (broadcasts are no-ops with 0 subscribers).
         self.event_bus: EventBus = EventBus()
