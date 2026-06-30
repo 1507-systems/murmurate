@@ -406,6 +406,91 @@ async def test_auth_with_token(aiohttp_client, config, config_dir, mock_db, mock
 
 
 # ---------------------------------------------------------------------------
+# Host-allowlist middleware (DNS-rebinding defense)
+# ---------------------------------------------------------------------------
+
+async def test_host_allowlist_allows_loopback(client):
+    """Requests with a loopback Host header should be allowed."""
+    for host in ("127.0.0.1", "localhost", "127.0.0.1:7683", "localhost:7683"):
+        resp = await client.get("/api/status", headers={"Host": host})
+        assert resp.status == 200, host
+
+
+async def test_host_allowlist_allows_ipv6_loopback(client):
+    """Bracketed and bare IPv6 loopback Host headers should be allowed."""
+    for host in ("[::1]:7683", "[::1]", "::1"):
+        resp = await client.get("/api/status", headers={"Host": host})
+        assert resp.status == 200, host
+
+
+async def test_host_allowlist_rejects_foreign_host(client):
+    """A rebinding attacker's hostname in Host should be rejected with 403.
+
+    This is the core DNS-rebinding defense: even though the request reaches
+    127.0.0.1, the browser sends the attacker's hostname, so we refuse it.
+    """
+    resp = await client.get("/api/status", headers={"Host": "evil.attacker.com"})
+    assert resp.status == 403
+
+
+async def test_host_allowlist_rejects_before_handler_runs(client, api_state):
+    """The Host check must run before any handler — even with a scheduler set,
+    a stop request from a foreign Host must be refused rather than executed."""
+    scheduler = MagicMock()
+    api_state.scheduler = scheduler
+    resp = await client.post(
+        "/api/daemon/stop", headers={"Host": "evil.attacker.com"}
+    )
+    assert resp.status == 403
+    scheduler.stop.assert_not_called()
+
+
+async def test_host_allowlist_rejects_when_token_unset(
+    aiohttp_client, config, config_dir, mock_db, mock_registry
+):
+    """With no token configured (the vulnerable default), a foreign Host must
+    still be rejected — the allowlist does not depend on the token."""
+    state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=mock_db,
+        registry=mock_registry,
+        scheduler=None,
+        api_token=None,
+    )
+    client = await aiohttp_client(create_app(state))
+    resp = await client.get("/api/status", headers={"Host": "evil.attacker.com"})
+    assert resp.status == 403
+
+
+async def test_host_allowlist_allows_configured_bind_host(
+    aiohttp_client, config, config_dir, mock_db, mock_registry
+):
+    """A legitimate non-loopback bind host should be reachable by its own name."""
+    state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=mock_db,
+        registry=mock_registry,
+        scheduler=None,
+        api_token="t",
+        bind_host="murmurate.lan",
+    )
+    client = await aiohttp_client(create_app(state))
+    resp = await client.get(
+        "/api/status",
+        headers={"Host": "murmurate.lan", "Authorization": "Bearer t"},
+    )
+    assert resp.status == 200
+    # A different host is still rejected.
+    resp = await client.get(
+        "/api/status",
+        headers={"Host": "evil.attacker.com", "Authorization": "Bearer t"},
+    )
+    assert resp.status == 403
+
+
+# ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
 
