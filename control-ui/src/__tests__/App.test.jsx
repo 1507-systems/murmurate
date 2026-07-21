@@ -2,9 +2,10 @@
  * Tests for the main App component and navigation.
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import App from '../App'
+import { configure } from '../api'
 
 // Mock the API so components don't make real fetch calls
 vi.mock('../api', () => ({
@@ -23,7 +24,14 @@ vi.mock('../api', () => ({
   }),
   stopDaemon: vi.fn(),
   configure: vi.fn(),
+  getToken: vi.fn().mockReturnValue(null),
 }))
+
+beforeEach(() => {
+  configure.mockClear()
+  sessionStorage.clear()
+  window.history.replaceState({}, '', '/')
+})
 
 describe('App', () => {
   it('renders the layout with sidebar', async () => {
@@ -79,5 +87,69 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('Daemon stopped')).toBeInTheDocument()
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Auth token bootstrap
+//
+// The API now always requires a bearer token (see the daemon's
+// murmurate.api.auth module). The control UI is a static SPA with no
+// filesystem access, so the token is handed off via a `?token=` URL
+// parameter (set by the menu bar app's "Open Dashboard" link) and cached in
+// sessionStorage so a plain reload doesn't lose auth.
+// ---------------------------------------------------------------------------
+
+describe('App auth token bootstrap', () => {
+  it('configures the API client from a ?token= URL parameter', async () => {
+    window.history.pushState({}, '', '/?token=url-handoff-token')
+    render(<App />)
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ token: 'url-handoff-token' })
+    })
+  })
+
+  it('strips the token from the URL after reading it', async () => {
+    window.history.pushState({}, '', '/?token=url-handoff-token&page=dashboard')
+    render(<App />)
+    await waitFor(() => {
+      expect(window.location.search).not.toContain('token=')
+    })
+    // Unrelated query params are preserved.
+    expect(window.location.search).toContain('page=dashboard')
+  })
+
+  it('caches the URL token in sessionStorage', async () => {
+    window.history.pushState({}, '', '/?token=url-handoff-token')
+    render(<App />)
+    await waitFor(() => {
+      expect(sessionStorage.getItem('murmurate_api_token')).toBe('url-handoff-token')
+    })
+  })
+
+  it('falls back to a sessionStorage token when the URL has none', async () => {
+    sessionStorage.setItem('murmurate_api_token', 'stored-token')
+    render(<App />)
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ token: 'stored-token' })
+    })
+  })
+
+  it('does not call configure when neither URL nor sessionStorage has a token', async () => {
+    render(<App />)
+    await waitFor(() => {
+      expect(screen.getByText('Murmurate')).toBeInTheDocument()
+    })
+    expect(configure).not.toHaveBeenCalled()
+  })
+
+  it('prefers the URL token over a stale sessionStorage value', async () => {
+    sessionStorage.setItem('murmurate_api_token', 'stale-token')
+    window.history.pushState({}, '', '/?token=fresh-token')
+    render(<App />)
+    await waitFor(() => {
+      expect(configure).toHaveBeenCalledWith({ token: 'fresh-token' })
+    })
+    expect(sessionStorage.getItem('murmurate_api_token')).toBe('fresh-token')
   })
 })

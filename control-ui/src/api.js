@@ -13,11 +13,30 @@ let authToken = null
 
 /**
  * Configure the API client. Call this at startup if connecting to a remote
- * Murmurate instance (different host/port than where the UI is served).
+ * Murmurate instance (different host/port than where the UI is served), or
+ * to set the auth token (see App.jsx's URL/sessionStorage bootstrap).
+ *
+ * `token` is applied whenever the key is present in the call, including
+ * `token: null`/`token: ''` to explicitly clear it — only a fully omitted
+ * `token` key leaves the current value untouched. This lets callers (and
+ * tests) reset auth state deliberately rather than only ever adding to it.
  */
-export function configure({ url, token }) {
+export function configure(options = {}) {
+  const { url, token } = options
   if (url) baseUrl = url.replace(/\/$/, '')
-  if (token) authToken = token
+  if ('token' in options) authToken = token || null
+}
+
+/**
+ * Return the currently configured auth token, or null if none is set.
+ *
+ * The API now always requires a bearer token (see the daemon's
+ * murmurate.api.auth module), but the one consumer that can't attach an
+ * Authorization header — the SSE EventSource connection in useSSE.js —
+ * needs the raw value to append as a `?token=` query parameter instead.
+ */
+export function getToken() {
+  return authToken
 }
 
 /**

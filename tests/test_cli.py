@@ -226,3 +226,72 @@ def test_start_api_refuses_unauthenticated_wildcard_bind(runner):
     result = runner.invoke(cli, ["start", "--api", "--api-host", "0.0.0.0"])
     assert result.exit_code != 0
     assert "without an auth token" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Auto-generated token on loopback (security fix: the API must never run
+# with no auth at all, even on the loopback default — see api/auth.py)
+# ---------------------------------------------------------------------------
+
+
+def test_start_api_loopback_auto_generates_token(runner, tmp_path, monkeypatch):
+    """`murmurate start --api` with no --api-token on the loopback default
+    must auto-generate and persist a token rather than running with none."""
+    monkeypatch.setattr(
+        "murmurate.cli.asyncio.run", lambda coro: coro.close()
+    )
+
+    result = runner.invoke(cli, ["start", "--api", "--config-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    token_file = tmp_path / "api_token"
+    assert token_file.exists()
+    assert token_file.read_text().strip()
+
+
+def test_api_command_loopback_auto_generates_token(runner, tmp_path, monkeypatch):
+    """`murmurate api` with no --api-token on the loopback default must
+    auto-generate and persist a token rather than running with none."""
+    monkeypatch.setattr(
+        "murmurate.cli.asyncio.run", lambda coro: coro.close()
+    )
+
+    result = runner.invoke(cli, ["api", "--config-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    token_file = tmp_path / "api_token"
+    assert token_file.exists()
+    assert token_file.read_text().strip()
+
+
+def test_start_api_loopback_respects_explicit_token(runner, tmp_path, monkeypatch):
+    """An explicit --api-token must be used as-is, not overridden by
+    auto-generation, and no token file should be written in that case."""
+    monkeypatch.setattr(
+        "murmurate.cli.asyncio.run", lambda coro: coro.close()
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "start",
+            "--api",
+            "--config-dir", str(tmp_path),
+            "--api-token", "operator-supplied-token",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "api_token").exists()
+
+
+def test_start_api_wildcard_bind_does_not_auto_generate_token(runner, tmp_path):
+    """A non-loopback bind with no explicit token must still fail closed —
+    auto-generation is deliberately scoped to the loopback default only, so
+    a LAN-exposed listener is never silently provisioned with a token the
+    operator didn't ask for."""
+    result = runner.invoke(
+        cli,
+        ["start", "--api", "--api-host", "0.0.0.0", "--config-dir", str(tmp_path)],
+    )
+    assert result.exit_code != 0
+    assert not (tmp_path / "api_token").exists()

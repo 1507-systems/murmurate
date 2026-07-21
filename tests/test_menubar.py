@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
 from unittest.mock import patch
 import threading
 import sys
@@ -72,6 +73,19 @@ class TestAppConfig:
         cfg = AppConfig(api_host="10.0.0.1", api_port=9999)
         assert cfg.dashboard_url == "http://10.0.0.1:9999"
 
+    def test_dashboard_url_includes_token_when_set(self):
+        """The API now always requires a token; the dashboard link must hand
+        it off via the URL since the SPA has no filesystem access to read it
+        itself (see App.jsx's URL/sessionStorage bootstrap)."""
+        from murmurate_menubar import AppConfig
+        cfg = AppConfig(api_host="127.0.0.1", api_port=7683, api_token="abc123")
+        assert cfg.dashboard_url == "http://127.0.0.1:7683/?token=abc123"
+
+    def test_dashboard_url_token_is_url_encoded(self):
+        from murmurate_menubar import AppConfig
+        cfg = AppConfig(api_token="needs/encoding+chars")
+        assert "token=needs%2Fencoding%2Bchars" in cfg.dashboard_url
+
     def test_custom_token(self):
         from murmurate_menubar import AppConfig
         cfg = AppConfig(api_token="my-secret")
@@ -81,6 +95,72 @@ class TestAppConfig:
         from murmurate_menubar import AppConfig
         cfg = AppConfig(poll_interval=30)
         assert cfg.poll_interval == 30
+
+
+# ---------------------------------------------------------------------------
+# Persisted-token discovery (security fix: the API now always requires a
+# token, even on loopback — the menu bar app must find it automatically)
+# ---------------------------------------------------------------------------
+
+class TestPersistedTokenDiscovery:
+    """Tests for reading the daemon's auto-generated token off disk when
+    MURMURATE_API_TOKEN is not set, so the menu bar app keeps working
+    against the default local instance without manual configuration."""
+
+    def test_default_config_dir_uses_env_var(self):
+        from murmurate_menubar import _default_config_dir
+        with patch.dict(os.environ, {"MURMURATE_CONFIG": "/tmp/custom-murmurate"}):
+            assert _default_config_dir() == Path("/tmp/custom-murmurate")
+
+    def test_default_config_dir_falls_back_to_home(self, monkeypatch):
+        from murmurate_menubar import _default_config_dir
+        monkeypatch.delenv("MURMURATE_CONFIG", raising=False)
+        assert _default_config_dir() == Path.home() / ".config" / "murmurate"
+
+    def test_read_persisted_token_returns_value(self, tmp_path):
+        from murmurate_menubar import _read_persisted_token
+        (tmp_path / "api_token").write_text("disk-token-value\n")
+        assert _read_persisted_token(tmp_path) == "disk-token-value"
+
+    def test_read_persisted_token_missing_file_returns_none(self, tmp_path):
+        from murmurate_menubar import _read_persisted_token
+        assert _read_persisted_token(tmp_path / "does-not-exist") is None
+
+    def test_read_persisted_token_empty_file_returns_none(self, tmp_path):
+        from murmurate_menubar import _read_persisted_token
+        (tmp_path / "api_token").write_text("   \n")
+        assert _read_persisted_token(tmp_path) is None
+
+    def test_load_config_from_env_falls_back_to_persisted_token(self, tmp_path, monkeypatch):
+        """With no MURMURATE_API_TOKEN set, _load_config_from_env should pick
+        up the token the daemon persisted to its config directory — this is
+        what lets 'Open Dashboard' / status polling keep working after the
+        API stopped accepting no-token requests."""
+        (tmp_path / "api_token").write_text("persisted-secret\n")
+        monkeypatch.delenv("MURMURATE_API_TOKEN", raising=False)
+        monkeypatch.setenv("MURMURATE_CONFIG", str(tmp_path))
+
+        app = _make_test_app()
+        assert app.config.api_token == "persisted-secret"
+
+    def test_load_config_from_env_prefers_explicit_env_token(self, tmp_path, monkeypatch):
+        """An explicit MURMURATE_API_TOKEN must win over the persisted file
+        (e.g. when pointed at a different, non-default instance)."""
+        (tmp_path / "api_token").write_text("persisted-secret\n")
+        monkeypatch.setenv("MURMURATE_CONFIG", str(tmp_path))
+        monkeypatch.setenv("MURMURATE_API_TOKEN", "explicit-env-token")
+
+        app = _make_test_app()
+        assert app.config.api_token == "explicit-env-token"
+
+    def test_load_config_from_env_no_token_available(self, tmp_path, monkeypatch):
+        """With neither an env var nor a persisted file, api_token stays
+        None — matches pre-fix behavior when no daemon has run yet."""
+        monkeypatch.delenv("MURMURATE_API_TOKEN", raising=False)
+        monkeypatch.setenv("MURMURATE_CONFIG", str(tmp_path / "nonexistent"))
+
+        app = _make_test_app()
+        assert app.config.api_token is None
 
 
 # ---------------------------------------------------------------------------

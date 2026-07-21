@@ -22,9 +22,18 @@
  * The hook falls back silently when EventSource is unavailable (very old
  * browsers or test environments) — components using it continue to work
  * via their existing polling hooks.
+ *
+ * Auth: the API requires a bearer token on every request (see the daemon's
+ * murmurate.api.auth module), but EventSource cannot set an Authorization
+ * header. The server's auth middleware special-cases this one endpoint to
+ * also accept the token as a `?token=` query parameter, so we append it
+ * here when api.js has one configured (via App.jsx's URL/sessionStorage
+ * bootstrap). In dev mode, via the Vite proxy, the token is injected
+ * server-side instead and this is a harmless no-op.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { getToken } from '../api'
 
 const SSE_PATH = '/api/events'
 
@@ -48,7 +57,9 @@ export function useSSE({ onEvent, enabled = true } = {}) {
     if (!enabled) return
     if (typeof EventSource === 'undefined') return  // SSR / old browsers
 
-    const es = new EventSource(SSE_PATH)
+    const token = getToken()
+    const url = token ? `${SSE_PATH}?token=${encodeURIComponent(token)}` : SSE_PATH
+    const es = new EventSource(url)
 
     es.onopen = () => setConnected(true)
 

@@ -15,11 +15,19 @@ Security model:
   - host_allowlist_middleware (runs first) rejects any request whose Host
     header is not a loopback name or the configured bind host. This blocks
     DNS-rebinding attacks regardless of token configuration.
-  - The CLI refuses to bind a non-loopback address without an auth token
-    (cli.py _require_token_for_nonloopback), so the no-token default is only
-    reachable on loopback.
-  - auth_middleware enforces a bearer token on /api/ requests when one is set.
-    With a token configured the server may bind 0.0.0.0 for remote access.
+  - origin_middleware (runs second) rejects any /api/ request whose Origin
+    header does not match this server's own origin, and never echoes a
+    wildcard Access-Control-Allow-Origin. This is what stops a same-machine
+    browser tab (any site the operator visits) from driving the API
+    cross-origin — the Host allowlist alone does not, since a direct
+    cross-origin request's Host header legitimately names this server.
+  - The CLI auto-generates and persists a bearer token on first run — even
+    for a loopback bind (api/auth.py) — so the API no longer runs with no
+    token at all in normal operation. Direct callers that explicitly bind
+    non-loopback without a token still fail closed
+    (cli.py _require_token_for_nonloopback).
+  - auth_middleware enforces the bearer token on /api/ requests when one is
+    set. With a token configured the server may bind 0.0.0.0 for remote access.
 
 Real-time updates:
   The EventBus (api/events.py) holds a set of active SSE connections. Callers
@@ -41,7 +49,7 @@ from aiohttp import web
 from murmurate.api.events import EventBus
 from murmurate.api.middleware import (
     host_allowlist_middleware,
-    cors_middleware,
+    origin_middleware,
     auth_middleware,
 )
 
@@ -53,14 +61,15 @@ def create_app(state: "ApiState") -> web.Application:
 
     The ApiState object is stored on the app dict so handlers can access shared
     daemon state without globals. Middleware enforces the Host allowlist (DNS-
-    rebinding defense), then CORS, then optional bearer-token auth — in that
-    order, so the Host check runs before any handler or auth logic.
+    rebinding defense), then the Origin check (cross-origin/CSRF defense),
+    then optional bearer-token auth — in that order, so both checks run
+    before any handler or auth logic.
 
     The EventBus is stored on both the app dict and ``state.event_bus`` so
     external callers (scheduler, CLI) can broadcast events via state alone.
     """
     app = web.Application(
-        middlewares=[host_allowlist_middleware, cors_middleware, auth_middleware]
+        middlewares=[host_allowlist_middleware, origin_middleware, auth_middleware]
     )
     app["state"] = state
     # Share the event bus on the app dict for handler convenience

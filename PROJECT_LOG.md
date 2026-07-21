@@ -586,3 +586,83 @@ to `.gitignore`. All tests passing, zero lint errors, zero security vulnerabilit
 - React tests: 54 passing, 0 failing
 - Lint errors: 0 (ruff + ESLint)
 - Security vulnerabilities: 0
+
+---
+
+## 2026-07-20 — Security Fix: Cross-Origin API Access + No-Token Loopback Default
+
+### Finding (HIGH)
+
+The local control REST API (default bind 127.0.0.1:7683, no token required
+in local mode) set a wildcard `Access-Control-Allow-Origin: *` and relied
+solely on the Host-header allowlist (`host_allowlist_middleware`) for
+protection. Neither stops a same-machine cross-origin request: a direct
+request from any website the operator has open in a browser tab legitimately
+carries `Host: 127.0.0.1:7683` (that really is the target), so the allowlist
+passes it, and the wildcard ACAO let the page both fire and read the
+response. Combined, any site the operator visited could drive the daemon
+cross-origin — stop it, rewrite its config via `PUT /api/config`, delete
+personas — and read session/browsing history.
+
+### Fix
+
+**1. Strict Origin check (`src/murmurate/api/middleware.py`)** — replaced
+`cors_middleware` with `origin_middleware`. It rejects any `/api/` request
+whose `Origin` header doesn't match the server's own origin (derived from
+the already-allowlisted `Host` header) with 403, and only ever echoes back
+that exact, verified origin — never `*`. Requests with no `Origin` header
+(non-browser clients: curl, the menu bar app's urllib client) pass through
+unaffected.
+
+**2. Mandatory auth token, even on loopback (`src/murmurate/api/auth.py`,
+new)** — `get_or_create_api_token(config_dir)` generates a
+`secrets.token_urlsafe(32)` token on first run and persists it to
+`<config_dir>/api_token` with `0600` permissions, returning the same value
+on subsequent calls. `cli.py`'s `start --api` and `api` commands now call
+this whenever `--api-token` isn't explicitly supplied *and* the bind is
+loopback — non-loopback binds still require an explicit `--api-token` from
+the operator (existing fail-closed behavior, unchanged) rather than being
+silently auto-provisioned for LAN exposure. `auth_middleware` additionally
+accepts the token as a `?token=` query parameter, but only on
+`GET /api/events`, since the browser's `EventSource` API cannot set an
+`Authorization` header.
+
+**Keeping the bundled clients working:**
+- **Menu bar app** (`menubar/murmurate_menubar.py`) — reads the persisted
+  token from `<config_dir>/api_token` (config dir resolved the same way as
+  `murmurate.config.resolve_config_dir`, reimplemented locally since the
+  menu bar app has no dependency on the `murmurate` package) whenever
+  `MURMURATE_API_TOKEN` isn't set. `dashboard_url` now appends
+  `?token=<token>` (URL-encoded) so "Open Dashboard" hands the token to the
+  browser-side SPA, which has no filesystem access of its own.
+- **Control UI** (`control-ui/`) — `App.jsx` reads the token from the
+  `?token=` URL parameter on load, caches it in `sessionStorage` (so a
+  plain reload doesn't lose auth), strips it from the URL, and calls
+  `api.js`'s `configure({ token })`. `useSSE.js` appends the token as a
+  `?token=` query param when opening the `EventSource` connection.
+  `vite.config.js`'s dev proxy reads the token file directly (Node has
+  filesystem access) and injects `Authorization` + rewrites `Origin` to the
+  daemon's own origin on every proxied request — the browser-side dev app
+  never needs to know the token at all.
+
+### Verification
+
+- Added `tests/test_auth.py` (token generation/persistence/permissions),
+  expanded `tests/test_api_server.py`, `tests/test_events.py` (Origin +
+  SSE query-token cases), `tests/test_cli.py` (auto-token wiring, and that
+  a non-loopback bind still refuses to auto-provision a token), and
+  `tests/test_menubar.py` (persisted-token discovery, `dashboard_url`
+  encoding). Added `control-ui/src/__tests__` coverage for `getToken`,
+  the App.jsx URL/sessionStorage bootstrap, and the SSE token query param.
+- Manual end-to-end smoke test against a running `murmurate api` instance:
+  confirmed 401 with no/wrong token, 200 with correct token, 403 for a
+  mismatched `Origin` (including with a *valid* token attached — the Origin
+  check is defense-in-depth on top of the token, not a replacement for it),
+  correct origin echoed (never `*`) on both regular responses and preflight,
+  DNS-rebinding Host check still 403s, and the SSE stream authenticates via
+  `?token=`.
+- Python tests: 495 passing (was 464). React tests: 64 passing (was 54).
+  ruff: 0 errors. ESLint: 0 errors. bandit: 0 new findings (added
+  `# nosec B105` on `TOKEN_FILENAME` — a filename constant, not a secret
+  value, flagged by bandit's naming heuristic; the 1 Medium/39 Low
+  pre-existing findings are unchanged, unrelated to this fix).
