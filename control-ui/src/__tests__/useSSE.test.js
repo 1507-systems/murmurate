@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSSE, useSessionEvents } from '../hooks/useSSE'
+import { configure } from '../api'
 
 // ---------------------------------------------------------------------------
 // EventSource mock
@@ -55,6 +56,9 @@ class MockEventSource {
 beforeEach(() => {
   MockEventSource.reset()
   globalThis.EventSource = MockEventSource
+  // useSSE.js reads the module-level auth token via api.js's getToken();
+  // reset it so tests don't leak state into each other.
+  configure({ token: null })
 })
 
 afterEach(() => {
@@ -246,5 +250,33 @@ describe('useSessionEvents', () => {
       result.current.clearEvents()
     })
     expect(result.current.events.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Auth token query parameter
+//
+// EventSource cannot set an Authorization header, so useSSE appends the
+// token api.js has configured (via App.jsx's URL/sessionStorage bootstrap,
+// or nothing at all in dev mode where the Vite proxy injects it instead)
+// as a `?token=` query parameter — the one case auth_middleware accepts it.
+// ---------------------------------------------------------------------------
+
+describe('useSSE auth token handling', () => {
+  it('connects without a token query param when none is configured', () => {
+    renderHook(() => useSSE())
+    expect(MockEventSource.instances[0].url).toBe('/api/events')
+  })
+
+  it('appends the configured token as a query parameter', () => {
+    configure({ token: 'stream-secret' })
+    renderHook(() => useSSE())
+    expect(MockEventSource.instances[0].url).toBe('/api/events?token=stream-secret')
+  })
+
+  it('URL-encodes special characters in the token', () => {
+    configure({ token: 'a/b+c' })
+    renderHook(() => useSSE())
+    expect(MockEventSource.instances[0].url).toBe('/api/events?token=a%2Fb%2Bc')
   })
 })

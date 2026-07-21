@@ -228,6 +228,54 @@ async def test_status_includes_sse_connections(client, api_state):
     assert isinstance(data["sse_connections"], int)
 
 
+# ---------------------------------------------------------------------------
+# SSE + auth token (EventSource cannot set an Authorization header, so
+# auth_middleware special-cases this endpoint to also accept ?token=)
+# ---------------------------------------------------------------------------
+
+async def test_sse_endpoint_accepts_token_query_param(
+    aiohttp_client, config, config_dir, mock_db, mock_registry
+):
+    """A correct ?token= query param should authenticate the SSE stream."""
+    state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=mock_db,
+        registry=mock_registry,
+        scheduler=None,
+        api_token="stream-secret-token",
+    )
+    app = create_app(state)
+    client = await aiohttp_client(app)
+
+    async with client.session.get(
+        client.make_url("/api/events?token=stream-secret-token")
+    ) as resp:
+        assert resp.status == 200
+        chunk = await resp.content.read(256)
+        assert b"connected" in chunk
+
+
+async def test_sse_endpoint_rejects_missing_token(
+    aiohttp_client, config, config_dir, mock_db, mock_registry
+):
+    """With a token configured, an SSE request with no token at all is refused
+    before it ever starts streaming (401, not a hung/streamed connection)."""
+    state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=mock_db,
+        registry=mock_registry,
+        scheduler=None,
+        api_token="stream-secret-token",
+    )
+    app = create_app(state)
+    client = await aiohttp_client(app)
+
+    resp = await client.get("/api/events")
+    assert resp.status == 401
+
+
 async def test_broadcast_from_state_reaches_queue(api_state):
     """Calling api_state.event_bus.broadcast() should reach subscriber queues."""
     bus = api_state.event_bus

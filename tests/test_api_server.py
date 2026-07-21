@@ -350,20 +350,85 @@ async def test_config_update(client, config_dir):
 
 
 # ---------------------------------------------------------------------------
-# CORS
+# CORS / Origin (cross-origin defense — see origin_middleware)
 # ---------------------------------------------------------------------------
+#
+# These replace the old permissive-CORS tests: the API used to echo a
+# wildcard Access-Control-Allow-Origin on every response, which combined
+# with the Host-only allowlist did nothing to stop a same-machine browser
+# tab from driving the API cross-origin. origin_middleware now rejects any
+# /api/ request whose Origin header does not match the server's own origin,
+# and only ever echoes back that exact, verified origin — never "*".
 
-async def test_cors_preflight(client):
-    """OPTIONS request should return CORS headers."""
-    resp = await client.options("/api/status")
-    assert resp.status == 204
-    assert resp.headers.get("Access-Control-Allow-Origin") == "*"
-
-
-async def test_cors_headers_on_response(client):
-    """Regular responses should include CORS headers."""
+async def test_no_origin_header_gets_no_cors_headers(client):
+    """Non-browser clients (no Origin header) get no ACAO — nothing to echo."""
     resp = await client.get("/api/status")
-    assert resp.headers.get("Access-Control-Allow-Origin") == "*"
+    assert resp.status == 200
+    assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
+async def test_matching_origin_is_echoed_exactly(client):
+    """A same-origin browser request gets its exact origin echoed, never '*'."""
+    resp = await client.get(
+        "/api/status",
+        headers={"Host": "127.0.0.1:7683", "Origin": "http://127.0.0.1:7683"},
+    )
+    assert resp.status == 200
+    assert resp.headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:7683"
+
+
+async def test_foreign_origin_rejected_with_403(client):
+    """A GET carrying a foreign Origin must be rejected — this is the fix for
+    the cross-origin read (session history / persona data exfiltration) finding."""
+    resp = await client.get(
+        "/api/status",
+        headers={"Host": "127.0.0.1:7683", "Origin": "https://evil.attacker.com"},
+    )
+    assert resp.status == 403
+    assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
+async def test_foreign_origin_rejected_before_handler_runs(client, api_state):
+    """A cross-origin POST (the CSRF vector: stop daemon, rewrite config,
+    delete personas) must be rejected before the handler executes."""
+    scheduler = MagicMock()
+    api_state.scheduler = scheduler
+    resp = await client.post(
+        "/api/daemon/stop",
+        headers={"Host": "127.0.0.1:7683", "Origin": "https://evil.attacker.com"},
+    )
+    assert resp.status == 403
+    scheduler.stop.assert_not_called()
+
+
+async def test_cors_preflight_matching_origin(client):
+    """OPTIONS from the API's own origin gets CORS headers echoing that origin."""
+    resp = await client.options(
+        "/api/status",
+        headers={"Host": "127.0.0.1:7683", "Origin": "http://127.0.0.1:7683"},
+    )
+    assert resp.status == 204
+    assert resp.headers.get("Access-Control-Allow-Origin") == "http://127.0.0.1:7683"
+    assert "POST" in resp.headers.get("Access-Control-Allow-Methods", "")
+
+
+async def test_cors_preflight_rejects_foreign_origin(client):
+    """Preflight from a foreign origin must be rejected, not echoed — this is
+    what previously let any preflight succeed via the wildcard ACAO."""
+    resp = await client.options(
+        "/api/status",
+        headers={"Host": "127.0.0.1:7683", "Origin": "https://evil.attacker.com"},
+    )
+    assert resp.status == 403
+    assert resp.headers.get("Access-Control-Allow-Origin") is None
+
+
+async def test_origin_check_scoped_to_api_paths(client):
+    """Static (non-/api/) paths are not gated on Origin — a foreign Origin on
+    a non-API path is not rejected by this middleware (host_allowlist and the
+    SPA handler govern those paths instead)."""
+    resp = await client.get("/", headers={"Origin": "https://evil.attacker.com"})
+    assert resp.status != 403
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +436,13 @@ async def test_cors_headers_on_response(client):
 # ---------------------------------------------------------------------------
 
 async def test_auth_no_token_required(client):
-    """Requests should pass when no API token is configured."""
+    """Requests should pass when no API token is configured.
+
+    This is the low-level ApiState/create_app default, still used directly
+    by embedders/tests. In normal CLI operation a token is now always
+    auto-generated (see api/auth.py) so this branch is not reachable —
+    api_token is never left unset for a running daemon.
+    """
     resp = await client.get("/api/status")
     assert resp.status == 200
 
@@ -403,6 +474,52 @@ async def test_auth_with_token(aiohttp_client, config, config_dir, mock_db, mock
         headers={"Authorization": "Bearer test-secret-token"},
     )
     assert resp.status == 200
+
+
+async def test_auth_sse_accepts_token_query_param(
+    aiohttp_client, config, config_dir, mock_db, mock_registry
+):
+    """GET /api/events should accept the token as a query param, since the
+    browser's EventSource API cannot set an Authorization header."""
+    state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=mock_db,
+        registry=mock_registry,
+        scheduler=None,
+        api_token="sse-secret-token",
+    )
+    app = create_app(state)
+    client = await aiohttp_client(app)
+
+    # No token at all — rejected before the SSE handler ever streams.
+    resp = await client.get("/api/events")
+    assert resp.status == 401
+
+    # Wrong query token — rejected.
+    resp = await client.get("/api/events?token=wrong")
+    assert resp.status == 401
+
+
+async def test_auth_query_token_only_accepted_for_sse_path(
+    aiohttp_client, config, config_dir, mock_db, mock_registry
+):
+    """The query-param token bypass must not extend to other endpoints —
+    otherwise a token leaked via referrer/logs on /api/events would also
+    authenticate state-changing requests via a query string."""
+    state = ApiState(
+        config=config,
+        config_dir=config_dir,
+        db=mock_db,
+        registry=mock_registry,
+        scheduler=None,
+        api_token="scoped-secret-token",
+    )
+    app = create_app(state)
+    client = await aiohttp_client(app)
+
+    resp = await client.get("/api/status?token=scoped-secret-token")
+    assert resp.status == 401
 
 
 # ---------------------------------------------------------------------------

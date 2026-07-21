@@ -1,23 +1,38 @@
 """
-middleware.py — Host-allowlist, CORS, and authentication middleware.
+middleware.py — Host-allowlist, Origin-check, and authentication middleware.
 
 The middleware chain runs in order: ``host_allowlist_middleware`` first, then
-``cors_middleware``, then ``auth_middleware``.
+``origin_middleware``, then ``auth_middleware``.
 
-Host allowlist (DNS-rebinding defense): the Control UI binds to loopback with
-no token in the default config, and the auth middleware then allows every
-request. That is only safe against a *network* attacker — it does nothing
-against DNS rebinding, where a malicious web page the operator visits resolves
-its own hostname to 127.0.0.1 and drives the local daemon from the browser.
-The browser still sends the attacker's hostname in the Host header, so we
-reject any request whose Host is not an allowed loopback name (or the configured
-bind host). This runs before any handler and fails closed.
+Host allowlist (DNS-rebinding defense): the Control UI binds to loopback by
+default, and the auth middleware then allows every request whose token (or,
+formerly, lack of one) matches. That is only safe against a *network*
+attacker — it does nothing against DNS rebinding, where a malicious web page
+the operator visits resolves its own hostname to 127.0.0.1 and drives the
+local daemon from the browser. The browser still sends the attacker's
+hostname in the Host header, so we reject any request whose Host is not an
+allowed loopback name (or the configured bind host). This runs before any
+handler and fails closed.
 
-CORS is permissive by default because the control UI is typically served from
-a different origin (localhost:5173 during development, or a different port in
-production). It is NOT a security boundary — the host allowlist and the bearer
-token are. The auth middleware checks for a bearer token on API requests when
-an API token is configured.
+Origin check (cross-origin/CSRF defense): the Host-header allowlist does
+*not* stop a same-machine browser tab from making a *direct* cross-origin
+request to the API — for that request the Host header legitimately reads
+"127.0.0.1:7683" (or whatever the daemon is bound to), because that really
+is the target. Only the Origin header — set by the browser to the page that
+initiated the request, and not forgeable by that page — reveals that the
+caller is a different site. ``origin_middleware`` rejects any /api/ request
+whose Origin does not match this server's own origin, and never echoes a
+wildcard Access-Control-Allow-Origin (it either omits CORS headers entirely
+for non-browser/same-origin requests, or echoes back the exact, verified
+origin). This closes the finding where any website the operator visited
+could stop the daemon, rewrite its config, delete personas, or read session
+history via a simple cross-origin fetch().
+
+Auth: auth_middleware enforces a bearer token on /api/ requests when one is
+configured. The CLI now auto-generates and persists a token on first run
+(see api/auth.py) even for a loopback bind, so in practice a token is always
+present — the "no token configured" branch below only matters for direct,
+non-CLI callers that explicitly construct an ApiState with api_token=None.
 """
 
 from __future__ import annotations
@@ -30,6 +45,15 @@ from aiohttp import web
 # DNS rebinding, because the browser would have to send the *attacker's*
 # hostname. The configured bind host is added to this set at request time.
 _ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+# CORS headers shared by both the preflight response and echoed onto actual
+# responses. Access-Control-Allow-Origin is deliberately NOT included here —
+# it is only ever set to the verified caller's own Origin, never a constant.
+_CORS_METHOD_HEADERS = {
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+}
 
 
 def _host_without_port(raw_host: str) -> str:
@@ -87,29 +111,59 @@ async def host_allowlist_middleware(request: web.Request, handler) -> web.Respon
     return await handler(request)
 
 
-@web.middleware
-async def cors_middleware(request: web.Request, handler) -> web.Response:
-    """Add CORS headers to all responses.
+def _expected_origin(request: web.Request) -> str:
+    """Return the Origin a legitimate same-origin request would carry.
 
-    Handles preflight OPTIONS requests automatically. Allows any origin
-    because the API is intended for local or LAN use where origin restrictions
-    provide no meaningful security — the bearer token is the auth boundary.
+    By the time this runs, host_allowlist_middleware has already verified
+    the Host header names this server (loopback or the configured bind
+    host), so "http://" + Host is exactly this API's own origin. The API is
+    HTTP-only (no TLS support), so the scheme is always "http".
     """
+    return f"http://{request.headers.get('Host', '').strip()}"
+
+
+@web.middleware
+async def origin_middleware(request: web.Request, handler) -> web.Response:
+    """Reject cross-origin /api/ requests; never echo a wildcard ACAO.
+
+    Non-browser clients (curl, the menu bar app's urllib-based client,
+    server-to-server calls) never send an Origin header, so they pass
+    through unaffected — auth_middleware's bearer-token check is what
+    protects them. When a browser *does* send Origin, it is compared
+    against this server's own origin (see _expected_origin); a mismatch is
+    refused outright with 403 rather than merely omitting CORS headers,
+    because omitting CORS headers alone does not stop a cross-origin
+    request from firing and causing side effects (e.g. a simple POST) — it
+    only stops the *response* from being readable. Static UI assets
+    (non-/api/ paths) are public and not gated here.
+    """
+    if not request.path.startswith("/api/"):
+        return await handler(request)
+
+    origin = request.headers.get("Origin")
+    if origin is not None:
+        if origin.rstrip("/").lower() != _expected_origin(request).lower():
+            return web.Response(
+                text='{"error": "Forbidden: cross-origin request rejected"}',
+                status=403,
+                content_type="application/json",
+            )
+
     if request.method == "OPTIONS":
-        return web.Response(
-            status=204,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-                "Access-Control-Max-Age": "86400",
-            },
-        )
+        headers = dict(_CORS_METHOD_HEADERS)
+        if origin is not None:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Vary"] = "Origin"
+        return web.Response(status=204, headers=headers)
 
     response = await handler(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    if origin is not None:
+        # Echo back the exact, already-verified origin — never "*". A
+        # verified-but-echoed origin is safe here because auth_middleware
+        # still requires the bearer token; this only controls whether a
+        # legitimate same-origin browser client can read the response.
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
     return response
 
 
@@ -117,15 +171,19 @@ async def cors_middleware(request: web.Request, handler) -> web.Response:
 async def auth_middleware(request: web.Request, handler) -> web.Response:
     """Enforce bearer token authentication when an API token is configured.
 
-    When no token is set, all API requests pass through. This is only safe
-    because two other controls fail closed first: the CLI refuses to bind a
-    non-loopback address without a token (cli.py _require_token_for_nonloopback),
-    and ``host_allowlist_middleware`` rejects any request whose Host header is
-    not a loopback/bind host (blocking DNS rebinding). Do not rely on this
-    middleware alone for the no-token case.
+    When no token is set, all API requests pass through. In normal CLI
+    operation this branch is no longer reachable — start()/api() always
+    resolve a token (explicit or auto-generated, see api/auth.py) before the
+    server binds — but it remains supported for direct, non-CLI callers that
+    explicitly construct an ApiState with api_token=None, and for tests.
 
     API paths require auth; static file paths (no /api/ prefix) do not, so
     the web UI can always load even if the token is misconfigured.
+
+    The SSE stream (GET /api/events) is opened via the browser's EventSource
+    API, which cannot set custom request headers, so it additionally accepts
+    the token as a ``?token=`` query parameter. No other endpoint accepts
+    the query-parameter form.
     """
     state = request.app.get("state")
     if state is None:
@@ -144,6 +202,11 @@ async def auth_middleware(request: web.Request, handler) -> web.Response:
     # Check the Authorization header
     auth_header = request.headers.get("Authorization", "")
     if auth_header == f"Bearer {token}":
+        return await handler(request)
+
+    # EventSource cannot set headers — allow the token via query string for
+    # this one endpoint only.
+    if request.path == "/api/events" and request.query.get("token") == token:
         return await handler(request)
 
     return web.Response(

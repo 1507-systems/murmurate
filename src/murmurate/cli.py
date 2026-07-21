@@ -142,9 +142,18 @@ def start(config_dir, log_format, api, api_port, api_host, api_token):
         click.echo("Daemon already running. Use 'murmurate stop' first.")
         sys.exit(1)
 
-    # Fail closed before doing any work: never expose the API on a non-loopback
-    # address without an auth token.
     if api:
+        # Auto-generate (or read the previously persisted) token for the
+        # loopback default so the API never runs with no auth at all — see
+        # api/auth.py. Non-loopback binds still require an *explicit*
+        # --api-token from the operator; we deliberately do not silently
+        # provision one for a network-exposed listener.
+        if not api_token and _is_loopback_host(api_host):
+            from murmurate.api.auth import get_or_create_api_token
+            api_token = get_or_create_api_token(config_path)
+
+        # Fail closed before doing any work: never expose the API on a non-loopback
+        # address without an auth token.
         _require_token_for_nonloopback(api_host, api_token)
 
     config = load_config(config_path)
@@ -170,7 +179,11 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
     mDNS is advertised when the server starts so other devices on the LAN can
     discover this Murmurate instance without manual IP configuration.
     """
-    # Backstop the bind/token policy even for direct (non-CLI) callers.
+    # Backstop the auto-token and bind/token policy even for direct
+    # (non-CLI) callers — mirrors the logic in start().
+    if not token and _is_loopback_host(host):
+        from murmurate.api.auth import get_or_create_api_token
+        token = get_or_create_api_token(config_dir)
     _require_token_for_nonloopback(host, token)
 
     import logging as _logging
@@ -326,11 +339,20 @@ def api_server(config_dir, port, host, api_token):
     """Run the Control UI API server (without the scheduler)."""
     from murmurate.config import load_config, resolve_config_dir
 
+    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
+
+    # Auto-generate (or read the previously persisted) token for the
+    # loopback default so the API never runs with no auth at all — see
+    # api/auth.py. Non-loopback binds still require an *explicit*
+    # --api-token from the operator.
+    if not api_token and _is_loopback_host(host):
+        from murmurate.api.auth import get_or_create_api_token
+        api_token = get_or_create_api_token(config_path)
+
     # Fail closed before binding: never expose the API on a non-loopback address
     # without an auth token.
     _require_token_for_nonloopback(host, api_token)
 
-    config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
     config = load_config(config_path)
     asyncio.run(_run_api_only(config, config_path, host, port, api_token))
 
@@ -343,7 +365,11 @@ async def _run_api_only(config, config_dir: Path, host: str, port: int, token: s
 
     mDNS is advertised so the LAN control UI can discover this instance.
     """
-    # Backstop the bind/token policy even for direct (non-CLI) callers.
+    # Backstop the auto-token and bind/token policy even for direct
+    # (non-CLI) callers — mirrors the logic in api_server().
+    if not token and _is_loopback_host(host):
+        from murmurate.api.auth import get_or_create_api_token
+        token = get_or_create_api_token(config_dir)
     _require_token_for_nonloopback(host, token)
 
     from aiohttp import web

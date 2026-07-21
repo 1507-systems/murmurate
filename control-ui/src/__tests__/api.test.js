@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   configure,
+  getToken,
   getStatus,
   stopDaemon,
   getPersonas,
@@ -155,6 +156,11 @@ describe('API client', () => {
     await getStatus()
     const [, opts] = mockFetch.mock.calls[0]
     expect(opts.headers.Authorization).toBe('Bearer my-secret')
+  })
+
+  it('getToken returns the token configure() was called with', () => {
+    configure({ token: 'sse-handoff-token' })
+    expect(getToken()).toBe('sse-handoff-token')
   })
 
   it('throws on HTTP error responses', async () => {
