@@ -11,7 +11,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
-      - run: pip install ruff
+      - run: pip install -r requirements-lint.txt
       - run: ruff check .
       - run: pytest
 
