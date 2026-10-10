@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # Keep the pinned ruff in requirements-lint.txt current (monthly PR).
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    allow:
+      - dependency-name: ruff
+    commit-message:
+      prefix: chore

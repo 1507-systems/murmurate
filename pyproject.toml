@@ -52,3 +52,8 @@ testpaths = ["tests"]
 # install's .pth file is not processed (which can happen when the project path
 # contains spaces, as with iCloud Drive locations on macOS).
 pythonpath = ["src"]
+
+[tool.ruff.lint]
+# ruff 0.16 widened its default rule set; keep the rules this repo was written
+# against. Widen deliberately in a separate change.
+select = ["E4", "E7", "E9", "F"]
