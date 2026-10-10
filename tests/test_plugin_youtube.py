@@ -7,20 +7,20 @@ primary extraction path, plus a fallback anchor-href-only page.
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.youtube import YouTubePlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.youtube import YouTubePlugin
 
 # ---------------------------------------------------------------------------
 # Helpers

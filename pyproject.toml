@@ -53,7 +53,7 @@ testpaths = ["tests"]
 # contains spaces, as with iCloud Drive locations on macOS).
 pythonpath = ["src"]
 
-[tool.ruff.lint]
-# ruff 0.16 widened its default rule set; keep the rules this repo was written
-# against. Widen deliberately in a separate change.
-select = ["E4", "E7", "E9", "F"]
+[tool.ruff.lint.per-file-ignores]
+# Menu-bar polling client: every API call degrades to a status message and must
+# never raise into rumps timer/menu callbacks, so its catch-alls are intentional.
+"menubar/murmurate_menubar.py" = ["BLE001"]

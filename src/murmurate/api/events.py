@@ -80,7 +80,7 @@ class EventBus:
                 # Drop the event for this slow consumer rather than blocking.
                 logger.debug("SSE queue full for one subscriber — event dropped")
             except Exception as exc:
-                logger.warning("SSE broadcast error: %s", exc)
+                logger.warning("SSE broadcast error: %s", exc, exc_info=True)
                 dead.append(q)
         for q in dead:
             self._queues.discard(q)
@@ -119,7 +119,7 @@ class EventBus:
                     # Wait up to 15 seconds, then send a heartbeat comment
                     payload = await asyncio.wait_for(q.get(), timeout=15.0)
                     await _write_event_raw(response, payload)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # SSE comment (": ...") keeps the connection alive
                     await response.write(b": heartbeat\n\n")
                 except (ConnectionResetError, asyncio.CancelledError):

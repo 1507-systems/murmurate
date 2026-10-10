@@ -21,11 +21,10 @@ from __future__ import annotations
 
 import random
 from html.parser import HTMLParser
-from urllib.parse import quote_plus, urljoin, urlparse, parse_qs
+from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 
 from murmurate.models import BrowseAction, SearchResult, SessionContext, TransportType
 from murmurate.plugins.base import SitePlugin
-
 
 # ---------------------------------------------------------------------------
 # HTML parser helpers
@@ -83,16 +82,14 @@ class _GoogleResultParser(HTMLParser):
         if tag == "a":
             href = attr_dict.get("href", "")
             if href and "/url?q=" in href:
-                # Extract the real destination from Google's redirect URL
-                try:
-                    qs_part = href.split("/url?")[1]
-                    params = parse_qs(qs_part)
-                    target = params.get("q", [None])[0]
-                    if target and target.startswith("http"):
-                        self._in_result_link = True
-                        self._current_url = target
-                except Exception:
-                    pass
+                # Extract the real destination from Google's redirect URL.
+                # The "/url?q=" guard above guarantees the split has a tail,
+                # and parse_qs never raises on str input with default limits.
+                qs_part = href.split("/url?", 1)[1]
+                target = parse_qs(qs_part).get("q", [None])[0]
+                if target and target.startswith("http"):
+                    self._in_result_link = True
+                    self._current_url = target
 
         elif tag == "h3" and self._in_result_link:
             # Title heading inside a result link

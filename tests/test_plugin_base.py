@@ -1,7 +1,9 @@
 import pytest
+
+from murmurate.models import TransportType
 from murmurate.plugins.base import SitePlugin
 from murmurate.transport.base import Transport
-from murmurate.models import TransportType
+
 
 def test_site_plugin_is_abstract():
     with pytest.raises(TypeError):

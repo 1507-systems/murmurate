@@ -6,11 +6,11 @@ server. The ApiState is populated with mock/test objects so we can verify
 handlers in isolation.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 
-from murmurate.api.server import ApiState, create_app, _count_nodes, _deep_update
+from murmurate.api.server import ApiState, _count_nodes, _deep_update, create_app
 from murmurate.config import MurmurateConfig
 
 

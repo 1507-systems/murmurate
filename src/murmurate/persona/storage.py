@@ -137,7 +137,8 @@ def load_all_personas(persona_dir: Path) -> list[PersonaState]:
     for json_file in sorted(persona_dir.glob("*.json")):
         try:
             personas.append(load_persona(json_file))
-        except Exception as exc:
+        # Fault-tolerant by design: any deserialisation failure skips just that file.
+        except Exception as exc:  # noqa: BLE001
             # Log the filename prominently so operators can locate and repair it
             log.warning(
                 "Skipping corrupted persona file %s: %s",

@@ -7,7 +7,6 @@ Covers type correctness, internal consistency, and statistical properties.
 import json
 from pathlib import Path
 
-
 from murmurate.models import FingerprintProfile
 from murmurate.persona.fingerprint import (
     _build_accept_language,

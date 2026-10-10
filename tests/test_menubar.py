@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import json
 import os
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from pathlib import Path
-from unittest.mock import patch
-import threading
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import ClassVar
+from unittest.mock import patch
 
 import pytest
 
@@ -39,12 +40,12 @@ sys.path.insert(
 )
 
 if sys.platform == "darwin":
-    from murmurate_menubar import (  # noqa: E402
-        AppConfig,
+    from murmurate_menubar import (
+        STATUS_SYMBOLS,
         ApiClient,
+        AppConfig,
         DaemonStatus,
         PersonaSummary,
-        STATUS_SYMBOLS,
     )
 
 
@@ -232,7 +233,7 @@ class _MockAPIHandler(BaseHTTPRequestHandler):
     """Simple HTTP handler that returns canned JSON responses."""
 
     # Class-level response data that tests can override
-    responses = {}
+    responses: ClassVar[dict] = {}
 
     def do_GET(self):
         path = self.path.split("?")[0]
@@ -261,7 +262,6 @@ class _MockAPIHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         """Suppress request logging during tests."""
-        pass
 
 
 @pytest.fixture

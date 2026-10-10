@@ -9,8 +9,8 @@ detection, link extraction, and text extraction.
 import pytest
 from aioresponses import aioresponses
 
-from murmurate.transport.http import HttpTransport, HttpResponse
 from murmurate.models import FingerprintProfile
+from murmurate.transport.http import HttpResponse, HttpTransport
 
 
 def _make_fingerprint():

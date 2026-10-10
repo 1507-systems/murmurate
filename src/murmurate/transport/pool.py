@@ -22,8 +22,11 @@ Pool blocking:
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -193,7 +196,7 @@ class BrowserPool:
                     await pooled.context.close()
                 except Exception:
                     # Best-effort cleanup — don't let one failure block the rest
-                    pass
+                    logger.debug("Failed to close browser context", exc_info=True)
             self._contexts.clear()
 
     # ------------------------------------------------------------------

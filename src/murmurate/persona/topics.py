@@ -11,7 +11,6 @@ import json
 import random
 from pathlib import Path
 
-
 # Locate the data directory relative to this source file.
 # File hierarchy: src/murmurate/persona/topics.py → 3 parents up → project root → data/
 _DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "topic_pools"

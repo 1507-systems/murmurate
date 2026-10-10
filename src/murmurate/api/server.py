@@ -37,10 +37,12 @@ Real-time updates:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from dataclasses import asdict
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -48,15 +50,15 @@ from aiohttp import web
 
 from murmurate.api.events import EventBus
 from murmurate.api.middleware import (
+    auth_middleware,
     host_allowlist_middleware,
     origin_middleware,
-    auth_middleware,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(state: "ApiState") -> web.Application:
+def create_app(state: ApiState) -> web.Application:
     """Build and return the aiohttp Application with all routes registered.
 
     The ApiState object is stored on the app dict so handlers can access shared
@@ -194,8 +196,8 @@ async def handle_status(request: web.Request) -> web.Response:
     if state.db:
         try:
             sessions = await state.db.get_session_history(limit=10000)
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
+            from datetime import datetime
+            now = datetime.now(UTC)
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
             today_sessions = [s for s in sessions if s.get("started_at", "") >= today_start]
             result["sessions_today"] = len(today_sessions)
@@ -205,7 +207,8 @@ async def handle_status(request: web.Request) -> web.Response:
             result["sessions_failed_today"] = sum(
                 1 for s in today_sessions if s.get("status") == "failed"
             )
-        except Exception as exc:
+        # Best-effort: /status is polled constantly and must stay up if stats fail.
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to fetch session stats for status: %s", exc)
 
     return _json_response(result)
@@ -262,7 +265,8 @@ async def handle_persona_detail(request: web.Request) -> web.Response:
     try:
         persona = load_persona(persona_file)
         return _json_response(asdict(persona))
-    except Exception as exc:
+    # Any deserialisation failure (JSON, missing/invalid fields) is reported as a 500.
+    except Exception as exc:  # noqa: BLE001
         return _json_response({"error": str(exc)}, status=500)
 
 
@@ -276,7 +280,7 @@ async def handle_persona_create(request: web.Request) -> web.Response:
 
     try:
         body = await request.json()
-    except Exception:
+    except (ValueError, LookupError):  # bad JSON, bad bytes, or unknown charset
         return _json_response({"error": "Invalid JSON body"}, status=400)
 
     name = body.get("name", "").strip()
@@ -298,7 +302,8 @@ async def handle_persona_create(request: web.Request) -> web.Response:
     if (persona_dir / f"{name}.json").exists():
         return _json_response({"error": f"Persona '{name}' already exists"}, status=409)
 
-    from datetime import datetime as dt, timezone
+    from datetime import datetime as dt
+
     from murmurate.models import PersonaState, TopicNode
     from murmurate.persona.fingerprint import generate_fingerprint
     from murmurate.persona.storage import save_persona
@@ -309,7 +314,7 @@ async def handle_persona_create(request: web.Request) -> web.Response:
         seeds = get_random_seeds(3)
 
     fp = generate_fingerprint()
-    now = dt.now(timezone.utc).isoformat()
+    now = dt.now(UTC).isoformat()
 
     tree = [
         TopicNode(topic=s, depth=0, children=[], query_count=0, last_used=None)
@@ -342,11 +347,11 @@ async def handle_persona_update(request: web.Request) -> web.Response:
 
     try:
         body = await request.json()
-    except Exception:
+    except (ValueError, LookupError):  # bad JSON, bad bytes, or unknown charset
         return _json_response({"error": "Invalid JSON body"}, status=400)
 
-    from murmurate.persona.storage import load_persona, save_persona
     from murmurate.models import TopicNode
+    from murmurate.persona.storage import load_persona, save_persona
 
     persona = load_persona(persona_file)
 
@@ -420,8 +425,8 @@ async def handle_stats(request: web.Request) -> web.Response:
         days = 7
     sessions = await state.db.get_session_history(limit=10000)
 
-    from datetime import datetime, timezone, timedelta
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     recent = [s for s in sessions if s.get("started_at", "") >= cutoff]
 
     total = len(recent)
@@ -473,7 +478,7 @@ async def handle_plugins_list(request: web.Request) -> web.Response:
         registry.load_bundled()
 
     result = []
-    for name, plugin in registry.all_plugins.items():
+    for name in registry.all_plugins:
         info = registry.get_plugin_info(name)
         if info:
             result.append(info)
@@ -548,7 +553,7 @@ async def handle_config_update(request: web.Request) -> web.Response:
 
     try:
         body = await request.json()
-    except Exception:
+    except (ValueError, LookupError):  # bad JSON, bad bytes, or unknown charset
         return _json_response({"error": "Invalid JSON body"}, status=400)
 
     import tomli_w
@@ -560,9 +565,8 @@ async def handle_config_update(request: web.Request) -> web.Response:
     current = asdict(state.config)
     _deep_update(current, body)
 
-    # Write to disk
-    with open(config_file, "wb") as f:
-        tomli_w.dump(current, f)
+    # Write to disk off the event loop
+    await asyncio.to_thread(config_file.write_bytes, tomli_w.dumps(current).encode())
 
     # Reload config in memory
     from murmurate.config import load_config

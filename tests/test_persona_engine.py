@@ -7,8 +7,8 @@ These tests verify that:
   - build_session_context assembles a fully-populated SessionContext
 """
 
+from murmurate.models import FingerprintProfile, PersonaState, SessionContext, TopicNode
 from murmurate.persona.engine import PersonaEngine
-from murmurate.models import PersonaState, TopicNode, FingerprintProfile, SessionContext
 
 
 def _make_persona():

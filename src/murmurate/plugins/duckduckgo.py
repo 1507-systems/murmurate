@@ -25,7 +25,6 @@ from urllib.parse import quote_plus, urljoin, urlparse
 from murmurate.models import BrowseAction, SearchResult, SessionContext, TransportType
 from murmurate.plugins.base import SitePlugin
 
-
 # ---------------------------------------------------------------------------
 # HTML parser helpers
 # ---------------------------------------------------------------------------

@@ -29,10 +29,13 @@ plugin layer calls directly.
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 
-from murmurate.transport.pool import BrowserPool
 from murmurate.models import FingerprintProfile
+from murmurate.transport.pool import BrowserPool
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserTransport:
@@ -137,7 +140,7 @@ class BrowserTransport:
             await page.mouse.move(x, y)
         except Exception:
             # Simulation is best-effort — never let it abort a real session
-            pass
+            logger.debug("Human-behaviour simulation failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Static helpers

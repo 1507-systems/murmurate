@@ -1,6 +1,15 @@
 <!-- summary: Autonomous AI agent orchestration daemon with plugin architecture, persona system, multi-transport search, and REST API. -->
 # Murmurate — Project Log
 
+## 2026-10-09 — Adopt ruff 0.17 default rule set
+
+Removed the `select = ["E4","E7","E9","F"]` pin from `[tool.ruff.lint]` so CI lints with ruff 0.17.0's defaults, after fixing all 128 findings:
+- Auto-fixed: import sorting, `datetime.UTC`, `TimeoutError` alias, quoted annotations, redundant `pass`, nested `with`/`if`, unused noqa.
+- Narrowed catch-alls where the failure set is known (`OSError` for the mDNS IP probe; `ValueError`/`LookupError` for API JSON bodies, so oversized bodies now return 413 instead of 400); removed an unreachable try/except in the Google parser.
+- Best-effort Playwright cleanup/simulation now logs at debug with traceback instead of `pass`; plugin-load, SSE and mDNS failures and failed sessions log tracebacks.
+- Intentional fault-isolation boundaries keep `except Exception` with a `# noqa: BLE001` and a one-line reason; `menubar/murmurate_menubar.py` has a per-file BLE001 ignore (polling client must never raise into rumps callbacks).
+- `config.toml` writes from the API run off the event loop; menubar script marked executable.
+
 ## 2026-03-28 — CI Fix: macOS-only Tests + Linux Trash Directory
 
 ### Problem

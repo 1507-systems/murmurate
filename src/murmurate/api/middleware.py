@@ -39,7 +39,6 @@ from __future__ import annotations
 
 from aiohttp import web
 
-
 # Host names (sans port) that always identify the local machine. A request
 # whose Host header resolves to one of these cannot have been smuggled in via
 # DNS rebinding, because the browser would have to send the *attacker's*
@@ -141,13 +140,12 @@ async def origin_middleware(request: web.Request, handler) -> web.Response:
         return await handler(request)
 
     origin = request.headers.get("Origin")
-    if origin is not None:
-        if origin.rstrip("/").lower() != _expected_origin(request).lower():
-            return web.Response(
-                text='{"error": "Forbidden: cross-origin request rejected"}',
-                status=403,
-                content_type="application/json",
-            )
+    if origin is not None and origin.rstrip("/").lower() != _expected_origin(request).lower():
+        return web.Response(
+            text='{"error": "Forbidden: cross-origin request rejected"}',
+            status=403,
+            content_type="application/json",
+        )
 
     if request.method == "OPTIONS":
         headers = dict(_CORS_METHOD_HEADERS)

@@ -8,7 +8,7 @@ for local development.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -35,7 +35,7 @@ class _JsonFormatter(logging.Formatter):
         super().format(record)
 
         entry: dict = {
-            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "msg": record.getMessage(),
         }

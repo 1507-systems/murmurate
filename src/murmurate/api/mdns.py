@@ -42,7 +42,8 @@ except ImportError:
     ServiceInfo = None  # type: ignore[assignment,misc]
 
 if TYPE_CHECKING:
-    from zeroconf import ServiceInfo as ServiceInfoT, Zeroconf as ZeroconfT
+    from zeroconf import ServiceInfo as ServiceInfoT
+    from zeroconf import Zeroconf as ZeroconfT
 
 
 def _get_local_ip() -> str:
@@ -55,7 +56,7 @@ def _get_local_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception:
+    except OSError:
         return "127.0.0.1"
 
 
@@ -78,8 +79,8 @@ class MdnsAdvertiser:
     def __init__(self, port: int = 7683, version: str = "0.3.0") -> None:
         self.port = port
         self.version = version
-        self._zeroconf: "ZeroconfT | None" = None
-        self._service_info: "ServiceInfoT | None" = None
+        self._zeroconf: ZeroconfT | None = None
+        self._service_info: ServiceInfoT | None = None
 
     def start(self) -> None:
         """Register the mDNS service record on the local network."""
@@ -119,7 +120,7 @@ class MdnsAdvertiser:
                 self.port,
             )
         except Exception as exc:
-            logger.warning("mDNS registration failed: %s", exc)
+            logger.warning("mDNS registration failed: %s", exc, exc_info=True)
             self._zeroconf = None
             self._service_info = None
 
@@ -133,7 +134,7 @@ class MdnsAdvertiser:
             self._zeroconf.close()
             logger.info("mDNS: service record withdrawn")
         except Exception as exc:
-            logger.warning("mDNS shutdown error: %s", exc)
+            logger.warning("mDNS shutdown error: %s", exc, exc_info=True)
         finally:
             self._zeroconf = None
             self._service_info = None

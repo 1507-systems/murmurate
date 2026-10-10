@@ -5,20 +5,20 @@ Mock transports return HttpResponse-like objects. The HTML fixtures replicate
 Amazon's search result and product detail page structures at a minimal level.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.amazon import AmazonPlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.amazon import AmazonPlugin
 
 # ---------------------------------------------------------------------------
 # Helpers

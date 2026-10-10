@@ -9,6 +9,7 @@ database, transports, and plugins — that belongs in integration tests.
 import click as _click
 import pytest
 from click.testing import CliRunner
+
 from murmurate.cli import (
     _is_loopback_host,
     _require_token_for_nonloopback,

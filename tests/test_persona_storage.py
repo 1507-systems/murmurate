@@ -14,7 +14,6 @@ import pytest
 from murmurate.models import FingerprintProfile, PersonaState, TopicNode
 from murmurate.persona.storage import load_all_personas, load_persona, save_persona
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

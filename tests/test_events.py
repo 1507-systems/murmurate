@@ -12,13 +12,13 @@ Verifies:
 
 import asyncio
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.api.events import EventBus, MAX_SSE_CONNECTIONS
+import pytest
+
+from murmurate.api.events import MAX_SSE_CONNECTIONS, EventBus
 from murmurate.api.server import ApiState, create_app
 from murmurate.config import MurmurateConfig
-
 
 # ---------------------------------------------------------------------------
 # EventBus unit tests (no HTTP)

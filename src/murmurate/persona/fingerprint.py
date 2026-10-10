@@ -13,7 +13,7 @@ to this file's location so it works regardless of the working directory.
 import json
 import random
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -190,7 +190,7 @@ def generate_fingerprint() -> FingerprintProfile:
     accept_language = _build_accept_language(locale)
 
     # 11. Timestamp -----------------------------------------------------------
-    created_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.now(UTC).isoformat()
 
     return FingerprintProfile(
         platform=platform_key,

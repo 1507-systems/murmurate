@@ -13,9 +13,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from murmurate.transport.pool import BrowserPool
 from murmurate.models import FingerprintProfile
-
+from murmurate.transport.pool import BrowserPool
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -64,7 +63,7 @@ def _mock_browser():
 @pytest.mark.asyncio
 async def test_pool_creates_context_on_first_acquire():
     """Acquiring from an empty pool should create a new browser context."""
-    browser, mock_ctx, _ = _mock_browser()
+    browser, _mock_ctx, _ = _mock_browser()
     pool = BrowserPool(browser, max_size=3)
 
     fp = _make_fingerprint()
@@ -81,7 +80,7 @@ async def test_pool_creates_context_on_first_acquire():
 @pytest.mark.asyncio
 async def test_pool_reuses_released_context():
     """After releasing a context, the next acquire should reuse it."""
-    browser, mock_ctx, _ = _mock_browser()
+    browser, _mock_ctx, _ = _mock_browser()
     pool = BrowserPool(browser, max_size=3)
     fp = _make_fingerprint()
 

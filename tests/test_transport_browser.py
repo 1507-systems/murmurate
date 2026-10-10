@@ -15,7 +15,6 @@ import pytest
 from murmurate.models import FingerprintProfile
 from murmurate.transport.pool import BrowserPool
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -80,6 +79,7 @@ def test_import_browser_transport_does_not_require_playwright():
 
     # Force reimport of the browser module — must not raise ImportError
     import importlib
+
     import murmurate.transport.browser as browser_mod
     importlib.reload(browser_mod)
 
@@ -194,7 +194,7 @@ async def test_navigate_acquires_and_releases_context():
     """navigate() must acquire a context before use and release it after."""
     from murmurate.transport.browser import BrowserTransport
 
-    browser, mock_ctx, mock_page = _mock_browser_for_pool()
+    browser, _mock_ctx, _mock_page = _mock_browser_for_pool()
     pool = BrowserPool(browser, max_size=3)
 
     transport = BrowserTransport(pool)
@@ -212,7 +212,7 @@ async def test_navigate_calls_add_init_script():
     """navigate() should install the fingerprint init script on the context."""
     from murmurate.transport.browser import BrowserTransport
 
-    browser, mock_ctx, mock_page = _mock_browser_for_pool()
+    browser, mock_ctx, _mock_page = _mock_browser_for_pool()
     pool = BrowserPool(browser, max_size=3)
 
     transport = BrowserTransport(pool)
@@ -230,7 +230,7 @@ async def test_navigate_calls_goto():
     """navigate() should call page.goto with the provided URL."""
     from murmurate.transport.browser import BrowserTransport
 
-    browser, mock_ctx, mock_page = _mock_browser_for_pool()
+    browser, _mock_ctx, mock_page = _mock_browser_for_pool()
     pool = BrowserPool(browser, max_size=3)
 
     transport = BrowserTransport(pool)
@@ -252,7 +252,7 @@ async def test_navigate_returns_html_content():
     """navigate() should return the page HTML content."""
     from murmurate.transport.browser import BrowserTransport
 
-    browser, mock_ctx, mock_page = _mock_browser_for_pool()
+    browser, _mock_ctx, mock_page = _mock_browser_for_pool()
     mock_page.content = AsyncMock(return_value="<html><body>Test Content</body></html>")
     pool = BrowserPool(browser, max_size=3)
 
@@ -272,7 +272,7 @@ async def test_navigate_releases_on_exception():
     """navigate() must release the context back to the pool even if goto raises."""
     from murmurate.transport.browser import BrowserTransport
 
-    browser, mock_ctx, mock_page = _mock_browser_for_pool()
+    browser, _mock_ctx, mock_page = _mock_browser_for_pool()
     mock_page.goto = AsyncMock(side_effect=Exception("Navigation failed"))
     pool = BrowserPool(browser, max_size=3)
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -24,7 +24,7 @@ _RETRY_BASE_DELAY = 0.05
 
 def _now_iso() -> str:
     """Return the current UTC time as an ISO-8601 string (with timezone suffix)."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class StateDB:
@@ -247,7 +247,7 @@ class StateDB:
         # Build the threshold timestamp in the same format as stored values
         from datetime import timedelta
         threshold = (
-            datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+            datetime.now(UTC) - timedelta(seconds=window_seconds)
         ).isoformat()
 
         cursor = await self._execute(
@@ -267,7 +267,7 @@ class StateDB:
         """
         from datetime import timedelta
         threshold = (
-            datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
+            datetime.now(UTC) - timedelta(seconds=max_age_seconds)
         ).isoformat()
 
         await self._execute(

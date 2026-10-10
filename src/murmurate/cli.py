@@ -28,10 +28,10 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import UTC
 from pathlib import Path
 
 import click
-
 
 # ---------------------------------------------------------------------------
 # Bind-address safety guard
@@ -82,7 +82,6 @@ def _require_token_for_nonloopback(host: str | None, token: str | None) -> None:
 @click.version_option(package_name="murmurate")
 def cli():
     """Murmurate — realistic decoy internet activity generator."""
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -132,8 +131,8 @@ def run(sessions, config_dir, log_format):
 def start(config_dir, log_format, api, api_port, api_host, api_token):
     """Start the daemon (foreground, for use with launchd/systemd)."""
     from murmurate.config import load_config, resolve_config_dir
+    from murmurate.daemon.lifecycle import check_already_running, cleanup_pid, write_pid
     from murmurate.log import setup_logging
-    from murmurate.daemon.lifecycle import check_already_running, write_pid, cleanup_pid
 
     config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
     pid_file = config_path / "murmurate.pid"
@@ -187,16 +186,18 @@ async def _run_with_api(config, config_dir: Path, host: str, port: int, token: s
     _require_token_for_nonloopback(host, token)
 
     import logging as _logging
+
     from aiohttp import web
-    from murmurate.api.server import ApiState, create_app
+
     from murmurate.api.mdns import MdnsAdvertiser
+    from murmurate.api.server import ApiState, create_app
     from murmurate.database import StateDB
     from murmurate.persona.engine import PersonaEngine
     from murmurate.persona.storage import load_all_personas
     from murmurate.plugins.registry import PluginRegistry
-    from murmurate.scheduler.timing import TimingModel
     from murmurate.scheduler.rate_limiter import RateLimiter
     from murmurate.scheduler.scheduler import Scheduler
+    from murmurate.scheduler.timing import TimingModel
     from murmurate.transport.http import HttpTransport
 
     db = StateDB(config_dir / "state.db")
@@ -282,9 +283,9 @@ async def _run_sessions(config, config_dir: Path, max_sessions: int | None) -> N
     from murmurate.persona.engine import PersonaEngine
     from murmurate.persona.storage import load_all_personas
     from murmurate.plugins.registry import PluginRegistry
-    from murmurate.scheduler.timing import TimingModel
     from murmurate.scheduler.rate_limiter import RateLimiter
     from murmurate.scheduler.scheduler import Scheduler
+    from murmurate.scheduler.timing import TimingModel
     from murmurate.transport.http import HttpTransport
 
     db = StateDB(config_dir / "state.db")
@@ -373,8 +374,9 @@ async def _run_api_only(config, config_dir: Path, host: str, port: int, token: s
     _require_token_for_nonloopback(host, token)
 
     from aiohttp import web
-    from murmurate.api.server import ApiState, create_app
+
     from murmurate.api.mdns import MdnsAdvertiser
+    from murmurate.api.server import ApiState, create_app
     from murmurate.database import StateDB
     from murmurate.plugins.registry import PluginRegistry
 
@@ -471,7 +473,6 @@ def stop(config_dir):
 @cli.group()
 def personas():
     """Manage personas."""
-    pass
 
 
 @personas.command("list")
@@ -511,7 +512,7 @@ def personas_list(config_dir):
 )
 def personas_add(name, seeds, config_dir):
     """Create a new persona."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from murmurate.config import resolve_config_dir
     from murmurate.models import PersonaState, TopicNode
@@ -528,7 +529,7 @@ def personas_add(name, seeds, config_dir):
         seeds = list(seeds)
 
     fp = generate_fingerprint()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Each seed becomes a root node in the topic tree (depth=0)
     tree = [
@@ -558,7 +559,6 @@ def personas_add(name, seeds, config_dir):
 @cli.group()
 def plugins():
     """Manage plugins."""
-    pass
 
 
 @plugins.command("list")
@@ -678,8 +678,8 @@ async def _show_stats(db_path, days):
             click.echo("No sessions found.")
             return
 
-        from datetime import datetime, timezone, timedelta
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
         recent = [s for s in sessions if s.get("started_at", "") >= cutoff]
 
         total = len(recent)
@@ -713,7 +713,7 @@ async def _show_stats(db_path, days):
 def install_daemon(config_dir, systemd):
     """Install as a system daemon (launchd on macOS, systemd on Linux)."""
     from murmurate.config import resolve_config_dir
-    from murmurate.daemon.install import install_launchd, generate_systemd_unit
+    from murmurate.daemon.install import generate_systemd_unit, install_launchd
 
     config_path = resolve_config_dir(Path(config_dir) if config_dir else None)
 

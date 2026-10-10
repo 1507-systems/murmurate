@@ -2,8 +2,11 @@
 # All tests are async (pytest-asyncio in auto mode handles this automatically).
 # Each test gets its own in-memory database to ensure isolation.
 
-import pytest
+from datetime import UTC
+
 import aiosqlite
+import pytest
+
 from murmurate.database import StateDB
 
 
@@ -135,12 +138,12 @@ async def test_rate_limit_count_different_domains(db):
 
 async def test_rate_limit_cleanup(db):
     """cleanup_rate_limits() should remove entries older than max_age_seconds."""
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta
 
     domain = "cleanup-test.com"
 
     # Insert a stale entry directly with an old timestamp
-    old_time = (datetime.now(timezone.utc) - timedelta(seconds=7200)).isoformat()
+    old_time = (datetime.now(UTC) - timedelta(seconds=7200)).isoformat()
     await db._conn.execute(
         "INSERT INTO rate_limits (domain, request_time) VALUES (?, ?)",
         (domain, old_time),
