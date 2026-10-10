@@ -5,20 +5,20 @@ Fixtures use old.reddit.com-style HTML with search-result-link containers
 and usertext-body post content sections.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.reddit import RedditPlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.reddit import RedditPlugin
 
 # ---------------------------------------------------------------------------
 # Helpers

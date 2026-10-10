@@ -1,6 +1,8 @@
 import pytest
-from murmurate.scheduler.rate_limiter import RateLimiter
+
 from murmurate.database import StateDB
+from murmurate.scheduler.rate_limiter import RateLimiter
+
 
 @pytest.fixture
 async def db(tmp_path):

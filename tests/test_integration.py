@@ -14,25 +14,24 @@ Key wiring constraints:
 
 import json
 import re
-import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from aioresponses import aioresponses
 
 from murmurate.config import MurmurateConfig, SchedulerConfig
 from murmurate.database import StateDB
-from murmurate.models import PersonaState, TopicNode, FingerprintProfile, TransportType
+from murmurate.models import FingerprintProfile, PersonaState, TopicNode, TransportType
 from murmurate.persona.engine import PersonaEngine
 from murmurate.persona.fingerprint import generate_fingerprint
-from murmurate.persona.storage import save_persona, load_all_personas
+from murmurate.persona.storage import load_all_personas, save_persona
 from murmurate.plugins.registry import PluginRegistry
-from murmurate.scheduler.timing import TimingModel
 from murmurate.scheduler.rate_limiter import RateLimiter
 from murmurate.scheduler.scheduler import Scheduler
+from murmurate.scheduler.timing import TimingModel
 from murmurate.transport.http import HttpTransport
-
 
 # ---------------------------------------------------------------------------
 # HTML / JSON fixtures for mocked HTTP responses
@@ -253,31 +252,29 @@ async def test_full_pipeline():
 
     with patch("murmurate.scheduler.scheduler.asyncio.sleep", sleep_mock), \
          patch("murmurate.transport.http.asyncio.sleep", sleep_mock), \
-         patch("murmurate.database.asyncio.sleep", sleep_mock):
+         patch("murmurate.database.asyncio.sleep", sleep_mock), aioresponses() as m:
+        _register_mock_urls(m, _RESULT_PAGE_HTML)
 
-        with aioresponses() as m:
-            _register_mock_urls(m, _RESULT_PAGE_HTML)
+        # IMPORTANT: start() must be called inside aioresponses so the
+        # ClientSession it creates is the patched mock, not a real one.
+        http_transport = HttpTransport(config)
+        await http_transport.start()
+        try:
+            scheduler = Scheduler(
+                config=config,
+                personas=[persona],
+                registry=registry,
+                http_transport=http_transport,
+                browser_transport=None,
+                db=db,
+                timing=timing,
+                rate_limiter=rate_limiter,
+                persona_engine=engine,
+            )
 
-            # IMPORTANT: start() must be called inside aioresponses so the
-            # ClientSession it creates is the patched mock, not a real one.
-            http_transport = HttpTransport(config)
-            await http_transport.start()
-            try:
-                scheduler = Scheduler(
-                    config=config,
-                    personas=[persona],
-                    registry=registry,
-                    http_transport=http_transport,
-                    browser_transport=None,
-                    db=db,
-                    timing=timing,
-                    rate_limiter=rate_limiter,
-                    persona_engine=engine,
-                )
-
-                results = await scheduler.run(max_sessions=3)
-            finally:
-                await http_transport.stop()
+            results = await scheduler.run(max_sessions=3)
+        finally:
+            await http_transport.stop()
 
     await db.close()
 
@@ -433,31 +430,29 @@ async def test_topic_evolution_through_sessions():
 
     with patch("murmurate.scheduler.scheduler.asyncio.sleep", sleep_mock), \
          patch("murmurate.transport.http.asyncio.sleep", sleep_mock), \
-         patch("murmurate.database.asyncio.sleep", sleep_mock):
+         patch("murmurate.database.asyncio.sleep", sleep_mock), aioresponses() as m:
+        # Use rich content so the TF-IDF extractor has enough material to
+        # extract subtopics (needs at least a few distinctive words)
+        _register_mock_urls(m, _RICH_CONTENT_HTML)
 
-        with aioresponses() as m:
-            # Use rich content so the TF-IDF extractor has enough material to
-            # extract subtopics (needs at least a few distinctive words)
-            _register_mock_urls(m, _RICH_CONTENT_HTML)
+        http_transport = HttpTransport(config)
+        await http_transport.start()
+        try:
+            scheduler = Scheduler(
+                config=config,
+                personas=[persona],
+                registry=registry,
+                http_transport=http_transport,
+                browser_transport=None,
+                db=db,
+                timing=timing,
+                rate_limiter=rate_limiter,
+                persona_engine=engine,
+            )
 
-            http_transport = HttpTransport(config)
-            await http_transport.start()
-            try:
-                scheduler = Scheduler(
-                    config=config,
-                    personas=[persona],
-                    registry=registry,
-                    http_transport=http_transport,
-                    browser_transport=None,
-                    db=db,
-                    timing=timing,
-                    rate_limiter=rate_limiter,
-                    persona_engine=engine,
-                )
-
-                results = await scheduler.run(max_sessions=2)
-            finally:
-                await http_transport.stop()
+            results = await scheduler.run(max_sessions=2)
+        finally:
+            await http_transport.stop()
 
     await db.close()
 

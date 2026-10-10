@@ -33,7 +33,6 @@ import aiohttp
 
 from murmurate.models import FingerprintProfile
 
-
 # ---------------------------------------------------------------------------
 # Response container
 # ---------------------------------------------------------------------------

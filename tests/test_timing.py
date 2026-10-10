@@ -1,13 +1,16 @@
 import random
 from datetime import datetime
+from typing import ClassVar
+
 from murmurate.scheduler.timing import TimingModel
+
 
 class FakeSchedulerConfig:
     sessions_per_hour_min = 3
     sessions_per_hour_max = 8
     active_hours_start = "07:00"
     active_hours_end = "23:00"
-    peak_hours = ["10:00", "20:00"]
+    peak_hours: ClassVar[list[str]] = ["10:00", "20:00"]
     quiet_hours_start = "23:30"
     quiet_hours_end = "06:30"
     burst_probability = 0.15

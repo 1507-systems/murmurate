@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 
+
 def generate_launchd_plist(config_dir: Path, label: str = "com.murmurate.daemon") -> str:
     """Generate a macOS launchd plist XML for running murmurate as a daemon."""
     python_path = sys.executable

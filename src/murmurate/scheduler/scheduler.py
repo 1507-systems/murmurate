@@ -19,19 +19,19 @@ import asyncio
 import logging
 import random
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from murmurate.config import MurmurateConfig
+from murmurate.database import StateDB
 from murmurate.models import BrowsingSession, SessionResult, TransportType
 from murmurate.persona.engine import PersonaEngine
 from murmurate.persona.evolution import evolve_topic_tree, extract_subtopics
 from murmurate.plugins.registry import PluginRegistry
-from murmurate.scheduler.timing import TimingModel
 from murmurate.scheduler.rate_limiter import RateLimiter
-from murmurate.database import StateDB
+from murmurate.scheduler.timing import TimingModel
 
 # TYPE_CHECKING guard keeps the import cost to zero when running without the API
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from murmurate.api.events import EventBus
 
@@ -121,7 +121,7 @@ class Scheduler:
                 break
 
             # Ask the timing model how long to wait
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             delay = self._timing.next_delay(now)
 
             if delay == float("inf"):
@@ -176,7 +176,7 @@ class Scheduler:
                 context=context,
                 transport_type=transport_type,
                 estimated_duration_s=random.randint(30, 180),
-                scheduled_at=datetime.now(timezone.utc).isoformat(),
+                scheduled_at=datetime.now(UTC).isoformat(),
             )
 
             # --- Execute the session ---
@@ -212,8 +212,9 @@ class Scheduler:
                     try:
                         action = await plugin.browse_result(sr, context, transport)
                         actions.append(action)
-                    except Exception as exc:
-                        # Non-fatal — log and continue with the remaining results
+                    # Plugin code boundary: any failure browsing one result is non-fatal —
+                    # log and continue with the remaining results.
+                    except Exception as exc:  # noqa: BLE001
                         logger.warning("Failed browsing %s: %s", sr.url, exc)
 
                 # --- Assemble the session result ---
@@ -227,7 +228,7 @@ class Scheduler:
                     total_duration_s=0.0,   # Intentionally unmeasured — per-session wall-clock timing not yet implemented
                     new_subtopics=[],
                     errors=[],
-                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    completed_at=datetime.now(UTC).isoformat(),
                     machine_id=self._machine_id,
                 )
 
@@ -284,7 +285,7 @@ class Scheduler:
                     })
 
             except Exception as exc:
-                logger.error("Session %s failed: %s", session.session_id[:8], exc)
+                logger.exception("Session %s failed", session.session_id[:8])
                 await self._db.log_session_failed(session.session_id, str(exc))
                 self._registry.record_failure(plugin.name)
 

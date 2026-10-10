@@ -15,7 +15,6 @@ from murmurate.models import TransportType
 from murmurate.plugins.base import SitePlugin
 from murmurate.plugins.registry import PluginRegistry
 
-
 # ---------------------------------------------------------------------------
 # Minimal concrete SitePlugin for use in tests
 # ---------------------------------------------------------------------------

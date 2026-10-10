@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 from murmurate.api.mdns import MdnsAdvertiser, _get_local_ip
 
-
 # ---------------------------------------------------------------------------
 # _get_local_ip
 # ---------------------------------------------------------------------------

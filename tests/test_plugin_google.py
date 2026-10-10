@@ -6,20 +6,20 @@ made. The HTML fixtures are minimal but structurally accurate representations
 of Google SERP and result page HTML.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.google import GooglePlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.google import GooglePlugin
 
 # ---------------------------------------------------------------------------
 # Helpers

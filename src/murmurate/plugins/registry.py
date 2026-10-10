@@ -91,7 +91,7 @@ class PluginRegistry:
                 mod = importlib.import_module(module_name)
                 count += self._register_from_module(mod)
             except Exception as e:
-                logger.warning(f"Failed to load bundled plugin {module_name}: {e}")
+                logger.warning(f"Failed to load bundled plugin {module_name}: {e}", exc_info=True)
         return count
 
     def load_user_plugins(self, plugin_dir: Path) -> int:
@@ -118,7 +118,7 @@ class PluginRegistry:
                 spec.loader.exec_module(mod)  # type: ignore[union-attr]
                 count += self._register_from_module(mod)
             except Exception as e:
-                logger.warning(f"Failed to load user plugin {py_file}: {e}")
+                logger.warning(f"Failed to load user plugin {py_file}: {e}", exc_info=True)
         return count
 
     def _register_from_module(self, mod) -> int:

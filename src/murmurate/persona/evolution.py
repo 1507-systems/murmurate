@@ -11,8 +11,8 @@ The drift_rate parameter models how "adventurous" the persona is: a low value
 (e.g. 0.8) requires a much stronger signal — yielding fewer, more focused topics.
 """
 
-from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 from murmurate.models import TopicNode
 

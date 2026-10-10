@@ -5,20 +5,20 @@ HTML fixtures use Bing's <li class="b_algo"> result structure. Mock transports
 return HttpResponse-like objects without making real network calls.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.bing import BingPlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.bing import BingPlugin
 
 # ---------------------------------------------------------------------------
 # Helpers

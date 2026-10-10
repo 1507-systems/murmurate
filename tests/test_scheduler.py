@@ -5,15 +5,20 @@ All external dependencies (transports, database, plugins) are fully mocked
 so these tests are fast, deterministic, and never touch the network or disk.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from murmurate.scheduler.scheduler import Scheduler
-from murmurate.models import (
-    TransportType, PersonaState, TopicNode, FingerprintProfile,
-    SearchResult, BrowseAction,
-)
-from murmurate.config import MurmurateConfig
 
+import pytest
+
+from murmurate.config import MurmurateConfig
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    TopicNode,
+    TransportType,
+)
+from murmurate.scheduler.scheduler import Scheduler
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -114,7 +119,7 @@ def _make_scheduler():
 @pytest.mark.asyncio
 async def test_run_single_session():
     """A single session should produce one SessionResult and log to the DB."""
-    scheduler, plugin, registry, db = _make_scheduler()
+    scheduler, _plugin, registry, db = _make_scheduler()
     results = await scheduler.run(max_sessions=1)
 
     assert len(results) == 1
@@ -246,7 +251,7 @@ async def test_no_plugins_available():
 @pytest.mark.asyncio
 async def test_rate_limit_skips_domain():
     """When can_request returns False for all domains, the session is skipped."""
-    scheduler, plugin, _, _ = _make_scheduler()
+    scheduler, _plugin, _, _ = _make_scheduler()
 
     # Rate limiter denies all requests — force stop after a couple iterations.
     # Patch asyncio.sleep so timing delays don't slow down the test.

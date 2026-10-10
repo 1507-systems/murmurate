@@ -6,20 +6,20 @@ a .get() AsyncMock that returns a mock HttpResponse-like object with .status,
 .html, .url, and .headers attributes — matching the real HttpResponse shape.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.duckduckgo import DuckDuckGoPlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.duckduckgo import DuckDuckGoPlugin
 
 # ---------------------------------------------------------------------------
 # Helpers

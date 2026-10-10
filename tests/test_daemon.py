@@ -2,13 +2,21 @@ import os
 import signal
 from pathlib import Path
 from unittest.mock import MagicMock
-from murmurate.daemon.lifecycle import (
-    write_pid, read_pid, is_running, check_already_running,
-    setup_signal_handlers, stop_daemon, cleanup_pid,
-)
+
 from murmurate.daemon.install import (
-    generate_launchd_plist, generate_systemd_unit,
+    generate_launchd_plist,
+    generate_systemd_unit,
 )
+from murmurate.daemon.lifecycle import (
+    check_already_running,
+    cleanup_pid,
+    is_running,
+    read_pid,
+    setup_signal_handlers,
+    stop_daemon,
+    write_pid,
+)
+
 
 def test_write_and_read_pid(tmp_path):
     pid_file = tmp_path / "test.pid"

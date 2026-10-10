@@ -18,15 +18,14 @@ import pytest
 
 from murmurate.config import (
     MurmurateConfig,
-    SchedulerConfig,
-    RateLimitConfig,
-    TransportConfig,
     PersonaConfig,
     PluginConfig,
+    RateLimitConfig,
+    SchedulerConfig,
+    TransportConfig,
     load_config,
     resolve_config_dir,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

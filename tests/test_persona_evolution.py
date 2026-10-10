@@ -4,8 +4,8 @@ tests/test_persona_evolution.py — Tests for TF-IDF topic evolution.
 Follows TDD: tests are written before the implementation exists.
 """
 
-from murmurate.persona.evolution import extract_subtopics, evolve_topic_tree
 from murmurate.models import TopicNode
+from murmurate.persona.evolution import evolve_topic_tree, extract_subtopics
 
 
 def test_extract_subtopics_from_content():

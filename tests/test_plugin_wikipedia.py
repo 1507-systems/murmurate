@@ -10,20 +10,20 @@ Wikipedia's opensearch API returns JSON as a four-element array:
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from murmurate.plugins.wikipedia import WikipediaPlugin
-from murmurate.models import (
-    TransportType,
-    SessionContext,
-    SearchResult,
-    BrowseAction,
-    PersonaState,
-    TopicNode,
-    FingerprintProfile,
-)
+import pytest
 
+from murmurate.models import (
+    BrowseAction,
+    FingerprintProfile,
+    PersonaState,
+    SearchResult,
+    SessionContext,
+    TopicNode,
+    TransportType,
+)
+from murmurate.plugins.wikipedia import WikipediaPlugin
 
 # ---------------------------------------------------------------------------
 # Helpers
