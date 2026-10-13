@@ -26,7 +26,7 @@ export function useApi(fetchFn, deps = []) {
     // fetchFn is intentionally excluded — callers should pass a stable reference
     // or wrap in useCallback. Including it here would cause infinite loops when
     // the caller passes an inline arrow function.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, deps)
 
   useEffect(() => {
