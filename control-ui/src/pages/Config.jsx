@@ -6,7 +6,7 @@
  * on the daemon side and trigger a hot-reload.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useApi } from '../hooks/useApi'
 import { getConfig, updateConfig } from '../api'
 import Card from '../components/Card'
@@ -18,10 +18,13 @@ export default function Config() {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState(null)
 
-  // Sync fetched config into the edit state
-  useEffect(() => {
-    if (config) setEditConfig(structuredClone(config))
-  }, [config])
+  // Sync fetched config into the edit state (adjusted during render rather
+  // than in an effect, per react.dev "you might not need an effect").
+  const [syncedConfig, setSyncedConfig] = useState(null)
+  if (config && config !== syncedConfig) {
+    setSyncedConfig(config)
+    setEditConfig(structuredClone(config))
+  }
 
   function updateField(section, key, value) {
     setEditConfig(prev => ({
